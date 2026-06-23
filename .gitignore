@@ -1,0 +1,78 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+/cypress/videos/
+/cypress/screenshots/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+# Development scratch and archived files (not needed in repo)
+dev-archive/
+legacy/
+vnstock-agent-guide/
+.vercel
+
+# Root-level scratch files (old development scripts)
+extract_data.py
+fetch_interbank_rate.py
+generate_market_data.py
+scratch_vci.py
+transform_data.py
+run_daily_pipeline.bat
+
+# Test files (kept locally, not part of repo)
+test_*.py
+*_test.py
+!backend_v2/tests/test_dnse_market_data.py
+!backend_v2/tests/test_dnse_realtime_provider.py
+!backend_v2/tests/test_stocks_dnse_integration.py
+
+# Generated data files (run ETL pipeline to regenerate)
+market_data.csv
+market_data.parquet
+lake/
+
+# Academic/personal documents (not part of the project)
+*.docx
+*.pdf
+
+# Planning docs (content in git history)
+ETL_IMPROVEMENT_ROADMAP.md
+implementation_plan.md
+
+# Python backend cache and environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+backend_v2/.venv/
+
+# Environment files with secrets - never commit
+backend_v2/.env
+.env
+!.env.example
+!backend_v2/.env.example

@@ -1,0 +1,16 @@
+<svg width="172" height="32" viewBox="0 0 172 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+	<rect width="32" height="32" rx="9" fill="url(#fin1-grad-dark)"/>
+	<path d="M8 22V10H19V12.6H11V15.2H17.5V17.8H11V22H8Z" fill="white"/>
+	<path d="M22.5 22V12.5H25.3V22H22.5Z" fill="#E5ECFF"/>
+	<circle cx="23.9" cy="10" r="1.2" fill="#E5ECFF"/>
+	<path d="M22.5 19.4L17.6 14.6L19.5 12.8L22.5 15.8L28.2 10.1L30.1 12L22.5 19.4Z" fill="#8AFFBF"/>
+
+	<text x="42" y="21.5" fill="#F9FAFB" font-size="18" font-family="Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="0.2">The Fin1</text>
+
+	<defs>
+		<linearGradient id="fin1-grad-dark" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#1D4ED8"/>
+			<stop offset="1" stop-color="#4338CA"/>
+		</linearGradient>
+	</defs>
+</svg>

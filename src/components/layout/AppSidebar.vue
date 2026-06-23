@@ -95,7 +95,6 @@ import {
   PieChartIcon,
   UserCircleIcon,
 } from '@/icons'
-import StockChartIcon from '@/icons/StockChartIcon.vue'
 import { isAdmin, isLoggedIn, isPremium, logout as authLogout } from '@/services/authApi'
 
 const route = useRoute()
@@ -107,7 +106,7 @@ const menuGroups = computed(() => {
     {
       title: 'Crypto Contest',
       items: [
-        { icon: StockChartIcon, name: 'Dashboard', path: '/' },
+        { icon: LayoutDashboardIcon, name: 'Dashboard', path: '/' },
         { icon: BarChartIcon, name: 'Trade Simulator', path: DEFAULT_TRADE_PATH },
         { icon: ListIcon, name: 'Contests', path: '/contests' },
         { icon: LayoutDashboardIcon, name: 'Leaderboard', path: '/contests/practice-arena/leaderboard' },
