@@ -3,7 +3,9 @@
     <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ symbol }} Chart</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ timeframe }} simulated candles</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          {{ timeframe }} {{ dataSource === 'binance' ? 'Live Binance Spot' : 'mock fallback' }} candles
+        </p>
       </div>
     </div>
     <div ref="chartEl" class="h-80 w-full"></div>
@@ -14,8 +16,8 @@
 import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { getCryptoCandles } from '@/services/cryptoMarketData'
-import type { CryptoSymbol, Timeframe } from '@/types/crypto'
+import { fetchCryptoCandlesWithSource, getCryptoCandles } from '@/services/cryptoMarketData'
+import type { CryptoSymbol, MarketDataSource, Timeframe } from '@/types/crypto'
 
 const props = defineProps<{
   symbol: CryptoSymbol
@@ -23,10 +25,21 @@ const props = defineProps<{
 }>()
 
 const chartEl = ref<HTMLElement | null>(null)
+const dataSource = ref<MarketDataSource>('mock')
 let chart: IChartApi | null = null
 let series: ReturnType<IChartApi['addSeries']> | null = null
 
-function renderChart() {
+function setChartData(candles = getCryptoCandles(props.symbol, props.timeframe, 80)) {
+  series?.setData(
+    candles.map((candle) => ({
+      ...candle,
+      time: candle.time as never,
+    })),
+  )
+  chart?.timeScale().fitContent()
+}
+
+async function renderChart() {
   if (!chartEl.value) return
   if (!chart) {
     chart = createChart(chartEl.value, {
@@ -45,17 +58,14 @@ function renderChart() {
     })
   }
 
-  series?.setData(
-    getCryptoCandles(props.symbol, props.timeframe, 80).map((candle) => ({
-      ...candle,
-      time: candle.time as never,
-    })),
-  )
-  chart.timeScale().fitContent()
+  setChartData()
+  const result = await fetchCryptoCandlesWithSource(props.symbol, props.timeframe, 80)
+  dataSource.value = result.source
+  setChartData(result.candles)
 }
 
-onMounted(renderChart)
-watch(() => [props.symbol, props.timeframe], renderChart)
+onMounted(() => void renderChart())
+watch(() => [props.symbol, props.timeframe], () => void renderChart())
 
 onBeforeUnmount(() => {
   chart?.remove()

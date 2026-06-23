@@ -12,6 +12,24 @@ export interface Candle {
   volume: number
 }
 
+export type MarketDataSource = 'binance' | 'mock'
+
+export interface OrderBookLevel {
+  price: number
+  quantity: number
+  total: number
+}
+
+export interface CryptoOrderBook {
+  symbol: CryptoSymbol
+  last_update_id: number | null
+  bids: OrderBookLevel[]
+  asks: OrderBookLevel[]
+  spread: number
+  mid_price: number
+  source: MarketDataSource
+}
+
 export interface CryptoAsset {
   symbol: CryptoSymbol
   baseAsset: 'BTC' | 'ETH' | 'SOL'

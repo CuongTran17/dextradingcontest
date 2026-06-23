@@ -21,14 +21,19 @@
       </div>
     </div>
 
-    <section class="grid gap-6 xl:grid-cols-[1.5fr_0.8fr]">
-      <CryptoChart :symbol="currentSymbol" :timeframe="timeframe" />
-      <OrderTicket
-        :symbol="currentSymbol"
-        :latest-price="latestPrice"
-        :error="orderError"
-        @submit="submitOrder"
-      />
+    <section class="grid gap-6 xl:grid-cols-[1.45fr_0.9fr]">
+      <div class="space-y-6">
+        <CryptoChart :symbol="currentSymbol" :timeframe="timeframe" />
+        <OrderBook :symbol="currentSymbol" :limit="100" />
+      </div>
+      <div class="space-y-6">
+        <OrderTicket
+          :symbol="currentSymbol"
+          :latest-price="latestPrice"
+          :error="orderError"
+          @submit="submitOrder"
+        />
+      </div>
     </section>
 
     <PortfolioSummary :portfolio="portfolio" :metrics="metrics" />
@@ -36,16 +41,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import CryptoChart from '@/components/crypto/CryptoChart.vue'
+import OrderBook from '@/components/crypto/OrderBook.vue'
 import OrderTicket from '@/components/crypto/OrderTicket.vue'
 import PortfolioSummary from '@/components/crypto/PortfolioSummary.vue'
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS, DEFAULT_CRYPTO_SYMBOL } from '@/constants/cryptoAssets'
 import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
-import { getLatestCryptoPrice } from '@/services/cryptoMarketData'
+import { fetchLatestCryptoPrices, getLatestCryptoPrice } from '@/services/cryptoMarketData'
 import { calculatePortfolioMetrics, executeMarketOrder } from '@/services/tradingSimulator'
 import {
   createInitialPortfolio,
@@ -59,6 +65,12 @@ const route = useRoute()
 const timeframeOptions: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D']
 const timeframe = ref<Timeframe>('1h')
 const orderError = ref('')
+const livePrices = ref<Record<CryptoSymbol, number>>({
+  BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
+  ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
+  SOLUSDT: getLatestCryptoPrice('SOLUSDT'),
+})
+let priceTimer: number | undefined
 
 const currentSymbol = computed<CryptoSymbol>(() => {
   const routeSymbol = typeof route.params.symbol === 'string' ? route.params.symbol : DEFAULT_CRYPTO_SYMBOL
@@ -67,7 +79,7 @@ const currentSymbol = computed<CryptoSymbol>(() => {
     : DEFAULT_CRYPTO_SYMBOL
 })
 
-const latestPrice = computed(() => getLatestCryptoPrice(currentSymbol.value))
+const latestPrice = computed(() => livePrices.value[currentSymbol.value])
 const contest = CRYPTO_CONTESTS.find((item) => item.id === DEFAULT_CONTEST_ID)!
 const state = ref<CryptoContestState>(loadContestState())
 const portfolio = ref<VirtualPortfolio>(
@@ -75,12 +87,7 @@ const portfolio = ref<VirtualPortfolio>(
     createInitialPortfolio(DEFAULT_CONTEST_ID, contest.initialCapital),
 )
 
-const latestPrices = computed<Record<CryptoSymbol, number>>(() => ({
-  BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
-  ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
-  SOLUSDT: getLatestCryptoPrice('SOLUSDT'),
-}))
-const metrics = computed(() => calculatePortfolioMetrics(portfolio.value, latestPrices.value))
+const metrics = computed(() => calculatePortfolioMetrics(portfolio.value, livePrices.value))
 
 function persistPortfolio() {
   state.value = {
@@ -108,4 +115,26 @@ function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
     orderError.value = error instanceof Error ? error.message : 'Unable to execute order'
   }
 }
+
+async function refreshLatestPrices() {
+  const prices = await fetchLatestCryptoPrices(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'])
+  livePrices.value = {
+    BTCUSDT: prices.BTCUSDT ?? getLatestCryptoPrice('BTCUSDT'),
+    ETHUSDT: prices.ETHUSDT ?? getLatestCryptoPrice('ETHUSDT'),
+    SOLUSDT: prices.SOLUSDT ?? getLatestCryptoPrice('SOLUSDT'),
+  }
+}
+
+onMounted(() => {
+  void refreshLatestPrices()
+  priceTimer = window.setInterval(() => void refreshLatestPrices(), 5000)
+})
+
+watch(currentSymbol, () => {
+  void refreshLatestPrices()
+})
+
+onBeforeUnmount(() => {
+  if (priceTimer) window.clearInterval(priceTimer)
+})
 </script>

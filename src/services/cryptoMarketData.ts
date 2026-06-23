@@ -1,4 +1,4 @@
-import type { Candle, CryptoSymbol, Timeframe } from '@/types/crypto'
+import type { Candle, CryptoOrderBook, CryptoSymbol, MarketDataSource, Timeframe } from '@/types/crypto'
 
 const BASE_PRICES: Record<CryptoSymbol, number> = {
   BTCUSDT: 64250,
@@ -21,6 +21,23 @@ function getSymbolPhase(symbol: CryptoSymbol): number {
 
 export function getLatestCryptoPrice(symbol: CryptoSymbol): number {
   return BASE_PRICES[symbol]
+}
+
+export async function fetchLatestCryptoPrices(
+  symbols: CryptoSymbol[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+): Promise<Partial<Record<CryptoSymbol, number>>> {
+  try {
+    const prices = await fetchJson<Partial<Record<CryptoSymbol, number>>>('/api/crypto/prices/latest')
+    return symbols.reduce<Partial<Record<CryptoSymbol, number>>>((result, symbol) => {
+      result[symbol] = prices[symbol] ?? BASE_PRICES[symbol]
+      return result
+    }, {})
+  } catch {
+    return symbols.reduce<Partial<Record<CryptoSymbol, number>>>((result, symbol) => {
+      result[symbol] = BASE_PRICES[symbol]
+      return result
+    }, {})
+  }
 }
 
 export function getCryptoCandles(
@@ -52,4 +69,72 @@ export function getCryptoCandles(
       volume: 1000 + Math.abs(wave) * 5000 + index * 25,
     }
   })
+}
+
+export async function fetchCryptoCandles(
+  symbol: CryptoSymbol,
+  timeframe: Timeframe,
+  count: number,
+): Promise<Candle[]> {
+  const result = await fetchCryptoCandlesWithSource(symbol, timeframe, count)
+  return result.candles
+}
+
+export async function fetchCryptoCandlesWithSource(
+  symbol: CryptoSymbol,
+  timeframe: Timeframe,
+  count: number,
+): Promise<{ candles: Candle[]; source: MarketDataSource }> {
+  try {
+    const candles = await fetchJson<Candle[]>(
+      `/api/crypto/candles?symbol=${symbol}&timeframe=${encodeURIComponent(timeframe)}&limit=${count}`,
+    )
+    return { candles, source: 'binance' }
+  } catch {
+    return { candles: getCryptoCandles(symbol, timeframe, count), source: 'mock' }
+  }
+}
+
+export async function fetchCryptoOrderBook(
+  symbol: CryptoSymbol,
+  limit = 100,
+): Promise<CryptoOrderBook> {
+  try {
+    return await fetchJson<CryptoOrderBook>(`/api/crypto/orderbook?symbol=${symbol}&limit=${limit}`)
+  } catch {
+    return getMockOrderBook(symbol, limit)
+  }
+}
+
+export function getMockOrderBook(symbol: CryptoSymbol, limit = 100): CryptoOrderBook {
+  const count = Math.max(1, Math.floor(limit))
+  const midPrice = BASE_PRICES[symbol]
+  const bids = Array.from({ length: count }, (_, index) => {
+    const price = midPrice - (index + 1) * midPrice * 0.0001
+    const quantity = 0.1 + index * 0.03
+    return { price, quantity, total: price * quantity }
+  })
+  const asks = Array.from({ length: count }, (_, index) => {
+    const price = midPrice + (index + 1) * midPrice * 0.0001
+    const quantity = 0.1 + index * 0.03
+    return { price, quantity, total: price * quantity }
+  })
+
+  return {
+    symbol,
+    last_update_id: null,
+    bids,
+    asks,
+    spread: asks[0].price - bids[0].price,
+    mid_price: midPrice,
+    source: 'mock',
+  }
+}
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(path)
+  if (!response.ok) {
+    throw new Error(`Crypto market data request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
 }
