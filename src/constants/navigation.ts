@@ -1,0 +1,2 @@
+export const DEFAULT_CRYPTO_SYMBOL = 'BTCUSDT'
+export const DEFAULT_TRADE_PATH = `/trade/${DEFAULT_CRYPTO_SYMBOL}`
