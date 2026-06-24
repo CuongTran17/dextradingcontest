@@ -4,6 +4,8 @@ const BASE_PRICES: Record<CryptoSymbol, number> = {
   BTCUSDT: 64250,
   ETHUSDT: 3420,
   SOLUSDT: 148,
+  XRPUSDT: 0.52,
+  BNBUSDT: 590,
 }
 
 const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
@@ -24,7 +26,7 @@ export function getLatestCryptoPrice(symbol: CryptoSymbol): number {
 }
 
 export async function fetchLatestCryptoPrices(
-  symbols: CryptoSymbol[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+  symbols: CryptoSymbol[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT'],
 ): Promise<Partial<Record<CryptoSymbol, number>>> {
   try {
     const prices = await fetchJson<Partial<Record<CryptoSymbol, number>>>('/api/crypto/prices/latest')

@@ -28,6 +28,22 @@ export const CRYPTO_ASSETS: CryptoAsset[] = [
     pricePrecision: 3,
     quantityPrecision: 3,
   },
+  {
+    symbol: 'XRPUSDT',
+    baseAsset: 'XRP',
+    quoteAsset: 'USDT_TEST',
+    displayName: 'XRP / USDT_TEST',
+    pricePrecision: 4,
+    quantityPrecision: 1,
+  },
+  {
+    symbol: 'BNBUSDT',
+    baseAsset: 'BNB',
+    quoteAsset: 'USDT_TEST',
+    displayName: 'BNB / USDT_TEST',
+    pricePrecision: 2,
+    quantityPrecision: 3,
+  },
 ]
 
 export function findCryptoAsset(symbol: string) {

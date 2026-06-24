@@ -1,4 +1,4 @@
-export type CryptoSymbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT'
+export type CryptoSymbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'XRPUSDT' | 'BNBUSDT'
 export type ContestStatus = 'practice' | 'upcoming' | 'active' | 'ended'
 export type OrderSide = 'buy' | 'sell'
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
@@ -32,7 +32,7 @@ export interface CryptoOrderBook {
 
 export interface CryptoAsset {
   symbol: CryptoSymbol
-  baseAsset: 'BTC' | 'ETH' | 'SOL'
+  baseAsset: 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'BNB'
   quoteAsset: 'USDT_TEST'
   displayName: string
   pricePrecision: number
@@ -75,4 +75,25 @@ export interface VirtualPortfolio {
   cash: number
   positions: Position[]
   orders: SimulatedOrder[]
+}
+
+export interface TradingAccount {
+  accountId: number
+  contestId: string
+  status: 'active' | 'frozen' | 'closed'
+  cash: number
+  initialEquity: number
+  equity: number
+  realizedPnl: number
+  unrealizedPnl: number
+  positions: Position[]
+  orders: SimulatedOrder[]
+}
+
+export interface MarketOrderInput {
+  contestId: string
+  clientOrderId: string
+  symbol: CryptoSymbol
+  side: OrderSide
+  quantity: number
 }

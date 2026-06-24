@@ -69,6 +69,8 @@ const livePrices = ref<Record<CryptoSymbol, number>>({
   BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
   ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
   SOLUSDT: getLatestCryptoPrice('SOLUSDT'),
+  XRPUSDT: getLatestCryptoPrice('XRPUSDT'),
+  BNBUSDT: getLatestCryptoPrice('BNBUSDT'),
 })
 let priceTimer: number | undefined
 
@@ -117,11 +119,19 @@ function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
 }
 
 async function refreshLatestPrices() {
-  const prices = await fetchLatestCryptoPrices(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'])
+  const prices = await fetchLatestCryptoPrices([
+    'BTCUSDT',
+    'ETHUSDT',
+    'SOLUSDT',
+    'XRPUSDT',
+    'BNBUSDT',
+  ])
   livePrices.value = {
     BTCUSDT: prices.BTCUSDT ?? getLatestCryptoPrice('BTCUSDT'),
     ETHUSDT: prices.ETHUSDT ?? getLatestCryptoPrice('ETHUSDT'),
     SOLUSDT: prices.SOLUSDT ?? getLatestCryptoPrice('SOLUSDT'),
+    XRPUSDT: prices.XRPUSDT ?? getLatestCryptoPrice('XRPUSDT'),
+    BNBUSDT: prices.BNBUSDT ?? getLatestCryptoPrice('BNBUSDT'),
   }
 }
 
