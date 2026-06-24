@@ -4,13 +4,18 @@ This project is an educational crypto trading contest simulator. Users receive v
 
 All balances, positions, trades, PnL, ROI, contest rewards, and leaderboard results are simulated. They have no real-money value. The app does not provide investment advice, exchange trading execution, deposits, withdrawals, or mainnet swaps.
 
-## Phase A
+## Current Phase
 
 - Vue 3, TypeScript, Vite, Tailwind CSS frontend.
-- FastAPI backend structure with a crypto simulator API contract.
-- BTCUSDT, ETHUSDT, and SOLUSDT mock market data.
-- LocalStorage-backed virtual portfolios for the frontend MVP.
-- Practice and contest fixtures with public leaderboard screens.
+- FastAPI backend with authenticated virtual trading APIs.
+- Binance Spot market prices, candles, and order-book snapshots.
+- BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, and BNBUSDT.
+- MySQL-backed contest participants, accounts, balances, positions, orders, and fills.
+- One isolated virtual account per user and contest.
+- Idempotent market orders executed against Binance order-book depth.
+
+Portfolio and order state is authoritative in MySQL. Browser `localStorage` is not used for
+balances, positions, or trading history.
 
 ## Frontend
 
@@ -34,16 +39,57 @@ npm.cmd run build
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend_v2\requirements.txt pytest
-.\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_crypto_simulator.py backend_v2\tests\test_crypto_routes.py -q
 ```
 
-Crypto API contract:
+Create a MySQL database and configure the connection:
+
+```sql
+CREATE DATABASE crypto_dex CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+```powershell
+Copy-Item backend_v2\.env.example backend_v2\.env
+# Set MYSQL_URL, MYSQL_ASYNC_URL, and JWT_SECRET in backend_v2\.env.
+
+Set-Location backend_v2
+..\.venv\Scripts\python.exe -m alembic upgrade head
+Set-Location ..
+
+npm.cmd run backend:dev
+```
+
+Run backend tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend_v2\tests -q
+```
+
+Public market API:
 
 ```text
 GET /api/crypto/assets
 GET /api/crypto/prices/latest
+GET /api/crypto/candles
+GET /api/crypto/orderbook
+```
+
+Authenticated trading API:
+
+```text
+POST /api/crypto/contests/{contest_id}/join
+GET  /api/crypto/accounts/{contest_id}
 POST /api/crypto/orders/market
 ```
+
+The `practice-arena` contest and five Binance Spot assets are seeded by Alembic migration
+`20260625_0003`.
+
+## Next Data Phases
+
+- Phase 2: dedicated `crypto_market.duckdb`, rolling 365-day `1m` candle backfill, and
+  materialized `5m`, `15m`, `1h`, and `4h` intervals.
+- Phase 3: Binance WebSocket ingestion for current candles and synchronized order books.
+- Phase 4: persisted leaderboard snapshots and Admin contest management.
 
 ## Safety
 
