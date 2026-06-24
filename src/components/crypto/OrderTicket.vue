@@ -63,9 +63,10 @@
 
     <button
       type="submit"
-      class="mt-5 h-11 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
+      class="mt-5 h-11 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+      :disabled="disabled || submitting || quantity <= 0"
     >
-      Submit {{ side === 'buy' ? 'Buy' : 'Sell' }}
+      {{ submitting ? 'Submitting...' : `Submit ${side === 'buy' ? 'Buy' : 'Sell'}` }}
     </button>
   </form>
 </template>
@@ -79,6 +80,8 @@ const props = defineProps<{
   symbol: CryptoSymbol
   latestPrice: number
   error?: string
+  submitting?: boolean
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{

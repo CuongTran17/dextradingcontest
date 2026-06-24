@@ -18,11 +18,11 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Positions</h3>
         <div class="mt-2 space-y-2">
-          <p v-if="portfolio.positions.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+          <p v-if="account.positions.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
             No open positions.
           </p>
           <div
-            v-for="position in portfolio.positions"
+            v-for="position in account.positions"
             :key="position.symbol"
             class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-800"
           >
@@ -37,7 +37,7 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Recent Orders</h3>
         <div class="mt-2 space-y-2">
-          <p v-if="portfolio.orders.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+          <p v-if="account.orders.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
             No orders yet.
           </p>
           <div
@@ -59,10 +59,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import type { VirtualPortfolio } from '@/types/crypto'
+import type { TradingAccount } from '@/types/crypto'
 
 const props = defineProps<{
-  portfolio: VirtualPortfolio
+  account: TradingAccount
   metrics: {
     cash: number
     positionsValue: number
@@ -74,7 +74,7 @@ const props = defineProps<{
   }
 }>()
 
-const recentOrders = computed(() => props.portfolio.orders.slice(-5).reverse())
+const recentOrders = computed(() => props.account.orders.slice(0, 5))
 const summaryItems = computed(() => [
   { label: 'Cash', value: formatCurrency(props.metrics.cash) },
   { label: 'Equity', value: formatCurrency(props.metrics.equity) },

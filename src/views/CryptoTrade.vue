@@ -31,12 +31,17 @@
           :symbol="currentSymbol"
           :latest-price="latestPrice"
           :error="orderError"
+          :submitting="orderSubmitting"
+          :disabled="accountLoading || !account"
           @submit="submitOrder"
         />
       </div>
     </section>
 
-    <PortfolioSummary :portfolio="portfolio" :metrics="metrics" />
+    <PortfolioSummary v-if="account" :account="account" :metrics="metrics" />
+    <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+      {{ accountLoading ? 'Loading trading account...' : accountError }}
+    </p>
   </main>
 </template>
 
@@ -50,21 +55,24 @@ import OrderTicket from '@/components/crypto/OrderTicket.vue'
 import PortfolioSummary from '@/components/crypto/PortfolioSummary.vue'
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS, DEFAULT_CRYPTO_SYMBOL } from '@/constants/cryptoAssets'
-import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
+import { ApiError } from '@/services/httpClient'
 import { fetchLatestCryptoPrices, getLatestCryptoPrice } from '@/services/cryptoMarketData'
-import { calculatePortfolioMetrics, executeMarketOrder } from '@/services/tradingSimulator'
 import {
-  createInitialPortfolio,
-  loadContestState,
-  saveContestState,
-  type CryptoContestState,
-} from '@/stores/cryptoContestStore'
-import type { CryptoSymbol, Timeframe, VirtualPortfolio } from '@/types/crypto'
+  getCryptoAccount,
+  joinCryptoContest,
+  placeCryptoMarketOrder,
+} from '@/services/cryptoTradingApi'
+import type { CryptoSymbol, Timeframe, TradingAccount } from '@/types/crypto'
 
 const route = useRoute()
 const timeframeOptions: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D']
 const timeframe = ref<Timeframe>('1h')
 const orderError = ref('')
+const accountError = ref('')
+const accountLoading = ref(true)
+const orderSubmitting = ref(false)
+const account = ref<TradingAccount | null>(null)
 const livePrices = ref<Record<CryptoSymbol, number>>({
   BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
   ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
@@ -82,39 +90,57 @@ const currentSymbol = computed<CryptoSymbol>(() => {
 })
 
 const latestPrice = computed(() => livePrices.value[currentSymbol.value])
-const contest = CRYPTO_CONTESTS.find((item) => item.id === DEFAULT_CONTEST_ID)!
-const state = ref<CryptoContestState>(loadContestState())
-const portfolio = ref<VirtualPortfolio>(
-  state.value.portfolios[DEFAULT_CONTEST_ID] ??
-    createInitialPortfolio(DEFAULT_CONTEST_ID, contest.initialCapital),
-)
+const metrics = computed(() => {
+  const current = account.value
+  const equity = current?.equity ?? 0
+  const initialEquity = current?.initialEquity ?? 0
+  const pnl = equity - initialEquity
 
-const metrics = computed(() => calculatePortfolioMetrics(portfolio.value, livePrices.value))
-
-function persistPortfolio() {
-  state.value = {
-    joinedContestIds: Array.from(new Set([...state.value.joinedContestIds, DEFAULT_CONTEST_ID])),
-    portfolios: {
-      ...state.value.portfolios,
-      [DEFAULT_CONTEST_ID]: portfolio.value,
-    },
+  return {
+    cash: current?.cash ?? 0,
+    positionsValue: Math.max(equity - (current?.cash ?? 0), 0),
+    equity,
+    pnl,
+    roi: initialEquity > 0 ? (pnl / initialEquity) * 100 : 0,
+    volume: current?.orders.reduce((sum, order) => sum + order.notional, 0) ?? 0,
+    tradeCount: current?.orders.length ?? 0,
   }
-  saveContestState(state.value)
-}
+})
 
-function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
+async function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
+  if (!account.value || orderSubmitting.value) return
+
   orderError.value = ''
+  orderSubmitting.value = true
   try {
-    portfolio.value = executeMarketOrder(portfolio.value, {
+    await placeCryptoMarketOrder({
       contestId: DEFAULT_CONTEST_ID,
+      clientOrderId: crypto.randomUUID(),
       symbol: currentSymbol.value,
       side: order.side,
       quantity: order.quantity,
-      latestPrice: latestPrice.value,
     })
-    persistPortfolio()
+    account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
   } catch (error) {
     orderError.value = error instanceof Error ? error.message : 'Unable to execute order'
+  } finally {
+    orderSubmitting.value = false
+  }
+}
+
+async function loadAccount() {
+  accountLoading.value = true
+  accountError.value = ''
+  try {
+    account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      account.value = await joinCryptoContest(DEFAULT_CONTEST_ID)
+    } else {
+      accountError.value = error instanceof Error ? error.message : 'Unable to load trading account'
+    }
+  } finally {
+    accountLoading.value = false
   }
 }
 
@@ -136,6 +162,7 @@ async function refreshLatestPrices() {
 }
 
 onMounted(() => {
+  void loadAccount()
   void refreshLatestPrices()
   priceTimer = window.setInterval(() => void refreshLatestPrices(), 5000)
 })

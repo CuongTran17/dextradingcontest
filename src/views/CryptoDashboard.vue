@@ -39,7 +39,13 @@
         </div>
       </div>
 
-      <PortfolioSummary :portfolio="portfolio" :metrics="metrics" />
+      <PortfolioSummary v-if="account" :account="account" :metrics="metrics" />
+      <div
+        v-else
+        class="border-l border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400"
+      >
+        {{ accountMessage }}
+      </div>
     </section>
 
     <section>
@@ -49,68 +55,82 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import LeaderboardTable, { type LeaderboardRow } from '@/components/crypto/LeaderboardTable.vue'
 import PortfolioSummary from '@/components/crypto/PortfolioSummary.vue'
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS } from '@/constants/cryptoAssets'
 import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
+import { isLoggedIn } from '@/services/authApi'
 import { getLatestCryptoPrice } from '@/services/cryptoMarketData'
-import { calculatePortfolioMetrics } from '@/services/tradingSimulator'
-import { createInitialPortfolio, loadContestState } from '@/stores/cryptoContestStore'
+import { getCryptoAccount } from '@/services/cryptoTradingApi'
+import type { TradingAccount } from '@/types/crypto'
 
-const latestPrices = {
-  BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
-  ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
-  SOLUSDT: getLatestCryptoPrice('SOLUSDT'),
-}
-
-const state = loadContestState()
-const practiceContest = CRYPTO_CONTESTS.find((contest) => contest.id === DEFAULT_CONTEST_ID)!
-const portfolio =
-  state.portfolios[DEFAULT_CONTEST_ID] ??
-  createInitialPortfolio(DEFAULT_CONTEST_ID, practiceContest.initialCapital)
+const account = ref<TradingAccount | null>(null)
+const accountMessage = ref(
+  isLoggedIn()
+    ? 'Loading your practice account...'
+    : 'Sign in to view your persistent practice portfolio.',
+)
 
 const activeContests = computed(() =>
   CRYPTO_CONTESTS.filter((contest) => contest.status === 'practice' || contest.status === 'active'),
 )
-const metrics = computed(() => calculatePortfolioMetrics(portfolio, latestPrices))
-const leaderboardRows: LeaderboardRow[] = [
-  {
-    user: '0x7A...91F2',
-    equity: 11240,
-    pnl: 1240,
-    roi: 12.4,
-    volume: 48200,
-    tradeCount: 18,
-    winRate: 61,
-    maxDrawdown: 4.2,
-    lastTrade: 'BTCUSDT buy',
-  },
-  {
-    user: 'Practice You',
-    equity: metrics.value.equity,
-    pnl: metrics.value.pnl,
-    roi: metrics.value.roi,
-    volume: metrics.value.volume,
-    tradeCount: metrics.value.tradeCount,
-    winRate: 0,
-    maxDrawdown: 0,
-    lastTrade: portfolio.orders.at(-1)?.symbol ?? 'No trades',
-  },
-  {
-    user: '0x2C...8AA0',
-    equity: 9810,
-    pnl: -190,
-    roi: -1.9,
-    volume: 13200,
-    tradeCount: 6,
-    winRate: 33,
-    maxDrawdown: 6.8,
-    lastTrade: 'SOLUSDT sell',
-  },
-]
+const metrics = computed(() => accountMetrics(account.value))
+const leaderboardRows = computed<LeaderboardRow[]>(() => {
+  const rows: LeaderboardRow[] = [
+    {
+      user: '0x7A...91F2',
+      equity: 11240,
+      pnl: 1240,
+      roi: 12.4,
+      volume: 48200,
+      tradeCount: 18,
+      winRate: 61,
+      maxDrawdown: 4.2,
+      lastTrade: 'BTCUSDT buy',
+    },
+  ]
+  if (account.value) {
+    rows.push({
+      user: 'Practice You',
+      equity: metrics.value.equity,
+      pnl: metrics.value.pnl,
+      roi: metrics.value.roi,
+      volume: metrics.value.volume,
+      tradeCount: metrics.value.tradeCount,
+      winRate: 0,
+      maxDrawdown: 0,
+      lastTrade: account.value.orders[0]?.symbol ?? 'No trades',
+    })
+  }
+  return rows
+})
+
+onMounted(async () => {
+  if (!isLoggedIn()) return
+  try {
+    account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
+  } catch (error) {
+    accountMessage.value = error instanceof Error ? error.message : 'Unable to load practice account'
+  }
+})
+
+function accountMetrics(current: TradingAccount | null) {
+  const equity = current?.equity ?? 0
+  const initialEquity = current?.initialEquity ?? 0
+  const pnl = equity - initialEquity
+  return {
+    cash: current?.cash ?? 0,
+    positionsValue: Math.max(equity - (current?.cash ?? 0), 0),
+    equity,
+    pnl,
+    roi: initialEquity > 0 ? (pnl / initialEquity) * 100 : 0,
+    volume: current?.orders.reduce((sum, order) => sum + order.notional, 0) ?? 0,
+    tradeCount: current?.orders.length ?? 0,
+  }
+}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {

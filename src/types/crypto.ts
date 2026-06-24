@@ -70,13 +70,6 @@ export interface SimulatedOrder {
   createdAt: string
 }
 
-export interface VirtualPortfolio {
-  contestId: string
-  cash: number
-  positions: Position[]
-  orders: SimulatedOrder[]
-}
-
 export interface TradingAccount {
   accountId: number
   contestId: string

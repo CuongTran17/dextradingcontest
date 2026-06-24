@@ -13,9 +13,10 @@
         <div class="flex gap-2">
           <button
             class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+            :disabled="joining || joined"
             @click="joinContest"
           >
-            Join Contest
+            {{ joined ? 'Joined' : joining ? 'Joining...' : 'Join Contest' }}
           </button>
           <router-link
             class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
@@ -44,41 +45,42 @@
           <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ contest.mode }}</dd>
         </div>
       </dl>
+      <p v-if="joinError" class="mt-4 text-sm text-rose-600">{{ joinError }}</p>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
-import {
-  createInitialPortfolio,
-  loadContestState,
-  saveContestState,
-} from '@/stores/cryptoContestStore'
+import { joinCryptoContest } from '@/services/cryptoTradingApi'
 
 const route = useRoute()
+const joining = ref(false)
+const joined = ref(false)
+const joinError = ref('')
 const contest = computed(
   () =>
     CRYPTO_CONTESTS.find((item) => item.id === route.params.contestId) ??
     CRYPTO_CONTESTS.find((item) => item.id === DEFAULT_CONTEST_ID)!,
 )
 
-function joinContest() {
-  const state = loadContestState()
-  const selectedContest = contest.value
-  saveContestState({
-    joinedContestIds: Array.from(new Set([...state.joinedContestIds, selectedContest.id])),
-    portfolios: {
-      ...state.portfolios,
-      [selectedContest.id]:
-        state.portfolios[selectedContest.id] ??
-        createInitialPortfolio(selectedContest.id, selectedContest.initialCapital),
-    },
-  })
+async function joinContest() {
+  if (joining.value || joined.value) return
+
+  joining.value = true
+  joinError.value = ''
+  try {
+    await joinCryptoContest(contest.value.id)
+    joined.value = true
+  } catch (error) {
+    joinError.value = error instanceof Error ? error.message : 'Unable to join contest'
+  } finally {
+    joining.value = false
+  }
 }
 
 function formatCurrency(value: number): string {
