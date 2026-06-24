@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import sessionmaker
 
 from .models import Base
+from . import crypto_models as _crypto_models  # noqa: F401
 from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
