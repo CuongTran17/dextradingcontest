@@ -1,0 +1,107 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from src.api.auth import require_auth
+from src.database.db import get_db
+from src.database.models import User
+from src.repositories.crypto_trading import CryptoTradingRepository
+from src.schemas.crypto_trading import (
+    MarketOrderCreate,
+    OrderResponse,
+    TradingAccountResponse,
+)
+from src.services.binance_market_data import get_order_book
+from src.services.crypto_accounts import (
+    AccountNotFoundError,
+    ContestNotFoundError,
+    CryptoAccountService,
+)
+from src.services.crypto_execution import (
+    AccountUnavailableError,
+    AssetUnavailableError,
+    CryptoOrderService,
+    InsufficientBalanceError,
+    InsufficientDepthError,
+    InsufficientPositionError,
+)
+
+router = APIRouter(prefix="/api/crypto", tags=["crypto-trading"])
+
+
+class BinanceRestLiquidityProvider:
+    def get_order_book(self, symbol: str, limit: int) -> dict:
+        return get_order_book(symbol, limit)
+
+
+def get_account_service(
+    db: Session = Depends(get_db),
+) -> CryptoAccountService:
+    return CryptoAccountService(CryptoTradingRepository(db))
+
+
+def get_order_service(
+    db: Session = Depends(get_db),
+) -> CryptoOrderService:
+    return CryptoOrderService(
+        CryptoTradingRepository(db),
+        BinanceRestLiquidityProvider(),
+    )
+
+
+@router.post(
+    "/contests/{contest_id}/join",
+    response_model=TradingAccountResponse,
+)
+def join_contest(
+    contest_id: str,
+    current_user: User = Depends(require_auth),
+    service: CryptoAccountService = Depends(get_account_service),
+):
+    try:
+        return service.join_contest(current_user.id, contest_id)
+    except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/accounts/{contest_id}",
+    response_model=TradingAccountResponse,
+)
+def get_account(
+    contest_id: str,
+    current_user: User = Depends(require_auth),
+    service: CryptoAccountService = Depends(get_account_service),
+):
+    try:
+        return service.get_account(current_user.id, contest_id)
+    except AccountNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/orders/market",
+    response_model=OrderResponse,
+)
+def place_market_order(
+    body: MarketOrderCreate,
+    current_user: User = Depends(require_auth),
+    service: CryptoOrderService = Depends(get_order_service),
+):
+    try:
+        return service.place_market_order(
+            user_id=current_user.id,
+            contest_slug=body.contest_id,
+            client_order_id=body.client_order_id,
+            symbol=body.symbol,
+            side=body.side,
+            quantity=body.quantity,
+        )
+    except (AccountUnavailableError, AssetUnavailableError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (
+        InsufficientBalanceError,
+        InsufficientDepthError,
+        InsufficientPositionError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

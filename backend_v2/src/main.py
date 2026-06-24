@@ -32,6 +32,7 @@ from src.jobs import build_lifespan
 from src.observability import RequestIdMiddleware
 from src.routes.analysis import router as analysis_router
 from src.routes.crypto import router as crypto_router
+from src.routes.crypto_trading import router as crypto_trading_router
 from src.routes.dnse_ticks import router as dnse_ticks_router
 from src.routes.etl_status import router as etl_status_router
 from src.routes.health import router as health_router
@@ -74,6 +75,7 @@ app.include_router(admin_router)
 app.include_router(portfolio_router)
 app.include_router(health_router)
 app.include_router(crypto_router)
+app.include_router(crypto_trading_router)
 app.include_router(stocks_router)
 app.include_router(analysis_router)
 app.include_router(dnse_ticks_router)
