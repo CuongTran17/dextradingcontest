@@ -7,7 +7,11 @@ from src.database.crypto_models import (
     Contest,
     ContestAsset,
     ContestParticipant,
+    CryptoAsset,
+    Position,
+    TradeFill,
     TradingAccount,
+    TradingOrder,
 )
 
 
@@ -108,6 +112,105 @@ class CryptoTradingRepository:
             .all()
         )
 
+    def get_order_by_client_id(
+        self,
+        user_id: int,
+        contest_slug: str,
+        client_order_id: str,
+    ) -> TradingOrder | None:
+        return (
+            self.db.query(TradingOrder)
+            .join(TradingAccount)
+            .join(ContestParticipant)
+            .join(Contest)
+            .filter(
+                Contest.slug == contest_slug,
+                ContestParticipant.user_id == user_id,
+                TradingOrder.client_order_id == client_order_id,
+            )
+            .first()
+        )
+
+    def lock_account_for_user(
+        self,
+        contest_slug: str,
+        user_id: int,
+    ) -> TradingAccount | None:
+        return (
+            self.db.query(TradingAccount)
+            .join(ContestParticipant)
+            .join(Contest)
+            .filter(
+                Contest.slug == contest_slug,
+                ContestParticipant.user_id == user_id,
+            )
+            .with_for_update()
+            .first()
+        )
+
+    def get_enabled_asset(
+        self,
+        contest_slug: str,
+        symbol: str,
+    ) -> tuple[CryptoAsset, Contest] | None:
+        row = (
+            self.db.query(CryptoAsset, Contest)
+            .join(ContestAsset, ContestAsset.asset_id == CryptoAsset.id)
+            .join(Contest, Contest.id == ContestAsset.contest_id)
+            .filter(
+                Contest.slug == contest_slug,
+                ContestAsset.is_enabled.is_(True),
+                CryptoAsset.symbol == symbol,
+                CryptoAsset.is_active.is_(True),
+            )
+            .first()
+        )
+        return tuple(row) if row else None
+
+    def lock_balance(
+        self,
+        account_id: int,
+        asset: str,
+    ) -> AccountBalance | None:
+        return (
+            self.db.query(AccountBalance)
+            .filter_by(account_id=account_id, asset=asset)
+            .with_for_update()
+            .first()
+        )
+
+    def lock_position(
+        self,
+        account_id: int,
+        asset_id: int,
+    ) -> Position | None:
+        return (
+            self.db.query(Position)
+            .filter_by(account_id=account_id, asset_id=asset_id)
+            .with_for_update()
+            .first()
+        )
+
+    def add_position(self, position: Position) -> Position:
+        self.db.add(position)
+        return position
+
+    def delete_position(self, position: Position) -> None:
+        self.db.delete(position)
+
+    def add_order(self, order: TradingOrder) -> TradingOrder:
+        self.db.add(order)
+        return order
+
+    def add_fill(self, fill: TradeFill) -> TradeFill:
+        self.db.add(fill)
+        return fill
+
+    def flush(self) -> None:
+        self.db.flush()
+
     def commit(self) -> None:
         self.db.commit()
 
+    def rollback(self) -> None:
+        self.db.rollback()
