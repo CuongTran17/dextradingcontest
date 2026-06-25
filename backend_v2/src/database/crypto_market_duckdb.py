@@ -6,7 +6,10 @@ from typing import Any, Iterable
 
 import duckdb
 
-from src.settings import REPO_ROOT, get_settings
+try:
+    from src.settings import REPO_ROOT, get_settings
+except ModuleNotFoundError:
+    from backend_v2.src.settings import REPO_ROOT, get_settings
 
 INTERVAL_MINUTES = {
     "1m": 1,
@@ -332,6 +335,28 @@ class CryptoMarketDuckDB:
                     params,
                 ).fetchone()[0]
             )
+
+    def get_candle_bounds(
+        self,
+        symbol: str,
+        interval: str,
+    ) -> dict[str, datetime] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT min(open_time), max(open_time)
+                FROM crypto_candles
+                WHERE exchange = 'binance' AND market_type = 'spot'
+                  AND symbol = ? AND interval = ? AND is_closed = TRUE
+                """,
+                [symbol.upper(), interval],
+            ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return {
+            "first_open_time": _utc_aware(row[0]),
+            "last_open_time": _utc_aware(row[1]),
+        }
 
 
 class LazyCryptoMarketDuckDB:

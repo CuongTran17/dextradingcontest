@@ -86,10 +86,25 @@ The `practice-arena` contest and five Binance Spot assets are seeded by Alembic 
 
 ## Next Data Phases
 
-- Phase 2: dedicated `crypto_market.duckdb`, rolling 365-day `1m` candle backfill, and
+- Phase 2 uses a dedicated `crypto_market.duckdb`, rolling `1m` candle history, and
   materialized `5m`, `15m`, `1h`, and `4h` intervals.
 - Phase 3: Binance WebSocket ingestion for current candles and synchronized order books.
 - Phase 4: persisted leaderboard snapshots and Admin contest management.
+
+Backfill the five configured Spot symbols:
+
+```powershell
+npm.cmd run crypto:backfill -- --days 365
+```
+
+For a smaller smoke run:
+
+```powershell
+npm.cmd run crypto:backfill -- --symbols BTCUSDT --days 1 --page-limit 500
+```
+
+The command is resumable. Its checkpoint is stored in the
+`crypto_ingestion_state` table inside `lake/warehouse/crypto_market.duckdb`.
 
 ## Safety
 

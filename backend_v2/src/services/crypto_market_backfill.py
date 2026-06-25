@@ -48,53 +48,70 @@ class CryptoMarketBackfillService:
         normalized = symbol.upper()
         now = _utc(self.now_provider())
         final_open_time = _floor_minute(now) - timedelta(minutes=1)
+        desired_start = (
+            _floor_minute(start_time)
+            if start_time is not None
+            else _floor_minute(now - timedelta(days=max(1, days)))
+        )
         state = self.repo.get_ingestion_state(normalized, "1m")
-        if state and state.get("last_closed_open_time"):
-            cursor = _utc(state["last_closed_open_time"]) + timedelta(minutes=1)
-        elif start_time is not None:
-            cursor = _floor_minute(start_time)
+        bounds = self.repo.get_candle_bounds(normalized, "1m")
+        if bounds is None:
+            ranges = [(desired_start, final_open_time)]
         else:
-            cursor = _floor_minute(now - timedelta(days=max(1, days)))
+            first_open = _utc(bounds["first_open_time"])
+            last_open = _utc(bounds["last_open_time"])
+            ranges = []
+            if first_open > desired_start:
+                ranges.append((desired_start, first_open - timedelta(minutes=1)))
+            if last_open < final_open_time:
+                ranges.append((last_open + timedelta(minutes=1), final_open_time))
 
         stored = 0
         pages = 0
-        last_closed = state.get("last_closed_open_time") if state else None
+        last_closed = (
+            _utc(bounds["last_open_time"])
+            if bounds
+            else state.get("last_closed_open_time") if state else None
+        )
         try:
-            while cursor <= final_open_time:
-                rows = self.fetch_page(
-                    normalized,
-                    "1m",
-                    min(max(page_limit, 1), 1000),
-                    cursor,
-                    final_open_time + timedelta(minutes=1) - timedelta(milliseconds=1),
-                )
-                if not rows:
-                    break
-
-                pages += 1
-                closed_rows = [
-                    row
-                    for row in rows
-                    if row.get("is_closed", True)
-                    and _utc(row["open_time"]) <= final_open_time
-                ]
-                if closed_rows:
-                    stored += self.repo.upsert_candles(
+            for range_start, range_end in ranges:
+                cursor = range_start
+                while cursor <= range_end:
+                    rows = self.fetch_page(
                         normalized,
                         "1m",
-                        closed_rows,
+                        min(max(page_limit, 1), 1000),
+                        cursor,
+                        range_end + timedelta(minutes=1) - timedelta(milliseconds=1),
                     )
-                    last_closed = _utc(closed_rows[-1]["open_time"])
-                    self.repo.update_ingestion_state(
-                        normalized,
-                        "1m",
-                        last_closed,
-                        status="running",
-                    )
+                    if not rows:
+                        break
 
-                cursor = max(_utc(row["open_time"]) for row in rows) + timedelta(minutes=1)
-                if len(rows) < min(max(page_limit, 1), 1000):
-                    break
+                    pages += 1
+                    closed_rows = [
+                        row
+                        for row in rows
+                        if row.get("is_closed", True)
+                        and _utc(row["open_time"]) <= range_end
+                    ]
+                    if closed_rows:
+                        stored += self.repo.upsert_candles(
+                            normalized,
+                            "1m",
+                            closed_rows,
+                        )
+                        page_last = _utc(closed_rows[-1]["open_time"])
+                        last_closed = max(last_closed, page_last) if last_closed else page_last
+                        self.repo.update_ingestion_state(
+                            normalized,
+                            "1m",
+                            last_closed,
+                            status="running",
+                        )
+
+                    cursor = max(_utc(row["open_time"]) for row in rows) + timedelta(minutes=1)
+                    if len(rows) < min(max(page_limit, 1), 1000):
+                        break
 
             self.repo.materialize_intervals(normalized)
             self.repo.update_ingestion_state(

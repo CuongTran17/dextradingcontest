@@ -24,8 +24,9 @@ def _row(open_time: datetime) -> dict:
 
 
 class FakeRepo:
-    def __init__(self, last_open_time=None):
+    def __init__(self, last_open_time=None, first_open_time=None):
         self.last_open_time = last_open_time
+        self.first_open_time = first_open_time or last_open_time
         self.saved = []
         self.states = []
         self.materialized = []
@@ -34,6 +35,14 @@ class FakeRepo:
         if self.last_open_time is None:
             return None
         return {"last_closed_open_time": self.last_open_time}
+
+    def get_candle_bounds(self, symbol, interval):
+        if self.first_open_time is None:
+            return None
+        return {
+            "first_open_time": self.first_open_time,
+            "last_open_time": self.last_open_time,
+        }
 
     def upsert_candles(self, symbol, interval, rows):
         self.saved.extend(rows)
@@ -86,7 +95,7 @@ def test_backfill_resumes_after_last_closed_candle():
         return []
 
     service = CryptoMarketBackfillService(
-        FakeRepo(last),
+        FakeRepo(last, first_open_time=now - timedelta(days=365)),
         fetch_page,
         now_provider=lambda: now,
     )
@@ -103,3 +112,27 @@ def test_default_symbols_match_supported_spot_market():
         "XRPUSDT",
         "BNBUSDT",
     )
+
+
+def test_backfill_expands_an_existing_short_window_backwards():
+    now = datetime(2026, 6, 25, 0, 10, tzinfo=timezone.utc)
+    existing_first = now - timedelta(days=1)
+    requested_starts = []
+
+    def fetch_page(symbol, interval, limit, start_time, end_time):
+        requested_starts.append(start_time)
+        return []
+
+    repo = FakeRepo(
+        last_open_time=now - timedelta(minutes=2),
+        first_open_time=existing_first,
+    )
+    service = CryptoMarketBackfillService(
+        repo,
+        fetch_page,
+        now_provider=lambda: now,
+    )
+
+    service.backfill_symbol("BTCUSDT", days=365)
+
+    assert requested_starts[0] == now - timedelta(days=365)

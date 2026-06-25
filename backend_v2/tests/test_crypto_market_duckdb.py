@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import subprocess
+import sys
+from pathlib import Path
 
 from src.database.crypto_market_duckdb import CryptoMarketDuckDB
 
@@ -71,3 +74,20 @@ def test_ingestion_state_and_retention(tmp_path):
     assert state["status"] == "success"
     assert deleted == 1
     assert repo.count_candles(symbol="ETHUSDT", interval="1m") == 1
+
+
+def test_module_imports_from_repository_root():
+    repo_root = Path(__file__).parents[2]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from backend_v2.src.database.crypto_market_duckdb import CryptoMarketDuckDB; print(CryptoMarketDuckDB.__name__)",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "CryptoMarketDuckDB"

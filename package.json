@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port 5174 --strictPort",
     "backend:dev": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe -m uvicorn src.main:app --reload",
+    "crypto:backfill": ".\\.venv\\Scripts\\python.exe backend_v2\\scripts\\backfill_crypto_market.py",
     "backend:ngrok": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe run_with_ngrok.py",
     "etl:update": ".\\.venv\\Scripts\\python.exe -m etl.run_etl --run-mode incremental --tick-source lake",
     "dev:after-etl": "npm run etl:update && npm run backend:dev",
