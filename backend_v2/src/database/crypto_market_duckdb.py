@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import duckdb
+import pandas as pd
 
 try:
     from src.settings import REPO_ROOT, get_settings
@@ -126,29 +127,54 @@ class CryptoMarketDuckDB:
         if not payload:
             return 0
 
+        columns = [
+            "exchange",
+            "market_type",
+            "symbol",
+            "interval",
+            "open_time",
+            "close_time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "quote_volume",
+            "trade_count",
+            "taker_buy_base_volume",
+            "taker_buy_quote_volume",
+            "is_closed",
+            "source",
+            "ingested_at",
+        ]
+        frame = pd.DataFrame(payload, columns=columns)
         with self.connect() as conn:
+            conn.register("incoming_crypto_candles", frame)
             conn.execute("BEGIN TRANSACTION")
             try:
-                conn.executemany(
+                conn.execute(
                     """
-                    DELETE FROM crypto_candles
-                    WHERE exchange = ? AND market_type = ? AND symbol = ?
-                      AND interval = ? AND open_time = ?
-                    """,
-                    [(row[0], row[1], row[2], row[3], row[4]) for row in payload],
+                    DELETE FROM crypto_candles AS target
+                    USING incoming_crypto_candles AS incoming
+                    WHERE target.exchange = incoming.exchange
+                      AND target.market_type = incoming.market_type
+                      AND target.symbol = incoming.symbol
+                      AND target.interval = incoming.interval
+                      AND target.open_time = incoming.open_time
+                    """
                 )
-                conn.executemany(
+                conn.execute(
                     """
-                    INSERT INTO crypto_candles VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                    )
-                    """,
-                    payload,
+                    INSERT INTO crypto_candles
+                    SELECT * FROM incoming_crypto_candles
+                    """
                 )
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
+            finally:
+                conn.unregister("incoming_crypto_candles")
         return len(payload)
 
     def load_candles(
