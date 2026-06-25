@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     mysql_url: str = "mysql+mysqlconnector://root:@localhost/vnstock_data"
     mysql_async_url: str | None = None
     duckdb_path: str = "lake/warehouse/market.duckdb"
+    crypto_duckdb_path: str = "lake/warehouse/crypto_market.duckdb"
     duckdb_request_reads_enabled: bool = False
     duckdb_request_writes_enabled: bool = False
     etl_run_on_backend_start: bool = False
