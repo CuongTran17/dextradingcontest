@@ -91,3 +91,29 @@ def test_module_imports_from_repository_root():
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "CryptoMarketDuckDB"
+
+
+def test_find_missing_ranges_groups_contiguous_minutes(tmp_path):
+    repo = CryptoMarketDuckDB(tmp_path / "crypto_market.duckdb")
+    start = datetime(2026, 6, 25, tzinfo=timezone.utc)
+    repo.upsert_candles(
+        "BTCUSDT",
+        "1m",
+        [
+            _candle(start, 100),
+            _candle(start + timedelta(minutes=3), 103),
+            _candle(start + timedelta(minutes=5), 105),
+        ],
+    )
+
+    gaps = repo.find_missing_ranges(
+        "BTCUSDT",
+        "1m",
+        start,
+        start + timedelta(minutes=5),
+    )
+
+    assert gaps == [
+        (start + timedelta(minutes=1), start + timedelta(minutes=2)),
+        (start + timedelta(minutes=4), start + timedelta(minutes=4)),
+    ]

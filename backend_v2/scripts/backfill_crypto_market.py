@@ -68,7 +68,9 @@ def main(argv: list[str] | None = None) -> int:
             f"checkpoint={checkpoint_text}"
         )
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=args.days)
+    ).replace(second=0, microsecond=0)
     deleted = crypto_market_repo.delete_older_than(cutoff)
     print(
         f"retention_deleted={deleted} warehouse={crypto_market_repo.db_path}"

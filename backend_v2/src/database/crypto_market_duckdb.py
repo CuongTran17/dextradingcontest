@@ -384,6 +384,65 @@ class CryptoMarketDuckDB:
             "last_open_time": _utc_aware(row[1]),
         }
 
+    def find_missing_ranges(
+        self,
+        symbol: str,
+        interval: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> list[tuple[datetime, datetime]]:
+        if interval != "1m":
+            raise ValueError("Gap detection currently supports the 1m canonical interval")
+
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                WITH expected AS (
+                    SELECT *
+                    FROM generate_series(
+                        CAST(? AS TIMESTAMP),
+                        CAST(? AS TIMESTAMP),
+                        INTERVAL '1 minute'
+                    ) AS generated(open_time)
+                ),
+                missing AS (
+                    SELECT expected.open_time
+                    FROM expected
+                    LEFT JOIN crypto_candles AS candle
+                      ON candle.exchange = 'binance'
+                     AND candle.market_type = 'spot'
+                     AND candle.symbol = ?
+                     AND candle.interval = ?
+                     AND candle.open_time = expected.open_time
+                     AND candle.is_closed = TRUE
+                    WHERE candle.open_time IS NULL
+                ),
+                grouped AS (
+                    SELECT
+                        open_time,
+                        open_time - (
+                            row_number() OVER (ORDER BY open_time)
+                            * INTERVAL '1 minute'
+                        ) AS gap_group
+                    FROM missing
+                )
+                SELECT min(open_time), max(open_time)
+                FROM grouped
+                GROUP BY gap_group
+                ORDER BY min(open_time)
+                """,
+                [
+                    _utc_naive(start_time),
+                    _utc_naive(end_time),
+                    symbol.upper(),
+                    interval,
+                ],
+            ).fetchall()
+        return [
+            (_utc_aware(row[0]), _utc_aware(row[1]))
+            for row in rows
+        ]
+
 
 class LazyCryptoMarketDuckDB:
     def __init__(self):

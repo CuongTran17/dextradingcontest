@@ -30,6 +30,7 @@ class FakeRepo:
         self.saved = []
         self.states = []
         self.materialized = []
+        self.gaps = []
 
     def get_ingestion_state(self, symbol, interval):
         if self.last_open_time is None:
@@ -43,6 +44,18 @@ class FakeRepo:
             "first_open_time": self.first_open_time,
             "last_open_time": self.last_open_time,
         }
+
+    def find_missing_ranges(self, symbol, interval, start_time, end_time):
+        if self.gaps:
+            return self.gaps
+        if self.first_open_time is None:
+            return [(start_time, end_time)]
+        ranges = []
+        if self.first_open_time > start_time:
+            ranges.append((start_time, self.first_open_time - timedelta(minutes=1)))
+        if self.last_open_time < end_time:
+            ranges.append((self.last_open_time + timedelta(minutes=1), end_time))
+        return ranges
 
     def upsert_candles(self, symbol, interval, rows):
         self.saved.extend(rows)
@@ -136,3 +149,23 @@ def test_backfill_expands_an_existing_short_window_backwards():
     service.backfill_symbol("BTCUSDT", days=365)
 
     assert requested_starts[0] == now - timedelta(days=365)
+
+
+def test_backfill_repairs_internal_missing_ranges():
+    now = datetime(2026, 6, 25, 0, 10, tzinfo=timezone.utc)
+    repo = FakeRepo(
+        last_open_time=now - timedelta(minutes=1),
+        first_open_time=now - timedelta(days=365),
+    )
+    gap_start = now - timedelta(hours=2)
+    repo.gaps = [(gap_start, gap_start + timedelta(minutes=4))]
+    starts = []
+
+    def fetch_page(symbol, interval, limit, start_time, end_time):
+        starts.append(start_time)
+        return []
+
+    service = CryptoMarketBackfillService(repo, fetch_page, now_provider=lambda: now)
+    service.backfill_symbol("BTCUSDT", days=365)
+
+    assert starts == [gap_start]

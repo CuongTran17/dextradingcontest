@@ -55,16 +55,12 @@ class CryptoMarketBackfillService:
         )
         state = self.repo.get_ingestion_state(normalized, "1m")
         bounds = self.repo.get_candle_bounds(normalized, "1m")
-        if bounds is None:
-            ranges = [(desired_start, final_open_time)]
-        else:
-            first_open = _utc(bounds["first_open_time"])
-            last_open = _utc(bounds["last_open_time"])
-            ranges = []
-            if first_open > desired_start:
-                ranges.append((desired_start, first_open - timedelta(minutes=1)))
-            if last_open < final_open_time:
-                ranges.append((last_open + timedelta(minutes=1), final_open_time))
+        ranges = self.repo.find_missing_ranges(
+            normalized,
+            "1m",
+            desired_start,
+            final_open_time,
+        )
 
         stored = 0
         pages = 0
