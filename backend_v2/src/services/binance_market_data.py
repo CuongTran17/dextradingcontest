@@ -25,6 +25,8 @@ TIMEFRAME_TO_INTERVAL = {
     "1D": "1d",
 }
 
+_HTTP_CLIENTS: dict[str, httpx.Client] = {}
+
 
 def get_latest_prices(symbols: list[str]) -> dict[str, float]:
     payload = _request_json(
@@ -116,14 +118,30 @@ def _request_json(path: str, params: dict[str, Any]) -> Any:
     last_error: Exception | None = None
     for base_url in BASE_ENDPOINTS:
         try:
-            with httpx.Client(base_url=base_url, timeout=8.0) as client:
-                response = client.get(path, params=params)
-                response.raise_for_status()
-                return response.json()
+            client = _get_http_client(base_url)
+            response = client.get(path, params=params)
+            response.raise_for_status()
+            return response.json()
         except (httpx.HTTPError, ValueError) as exc:
             last_error = exc
 
     raise RuntimeError(f"Binance market data unavailable: {last_error}")
+
+
+def _get_http_client(base_url: str) -> httpx.Client:
+    client = _HTTP_CLIENTS.get(base_url)
+    if client is None:
+        client = httpx.Client(
+            base_url=base_url,
+            timeout=8.0,
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=5,
+                keepalive_expiry=30.0,
+            ),
+        )
+        _HTTP_CLIENTS[base_url] = client
+    return client
 
 
 def _map_depth_level(level: list[str]) -> dict[str, float]:
