@@ -50,3 +50,34 @@ def test_orderbook_returns_market_depth(monkeypatch):
     assert body["source"] == "binance"
     assert body["bids"][0]["price"] == 100.0
     assert body["asks"][0]["price"] == 101.0
+
+
+def test_candles_use_duckdb_before_binance(monkeypatch):
+    from src.routes import crypto
+
+    expected = [
+        {
+            "time": 1,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+    ]
+    monkeypatch.setattr(
+        crypto.crypto_market_repo,
+        "load_candles",
+        lambda symbol, interval, *, limit: expected,
+    )
+    monkeypatch.setattr(
+        crypto,
+        "get_binance_candles",
+        lambda *args: (_ for _ in ()).throw(AssertionError("Binance should not be called")),
+    )
+    client = make_client()
+
+    response = client.get("/api/crypto/candles?symbol=BTCUSDT&timeframe=1m&limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == expected

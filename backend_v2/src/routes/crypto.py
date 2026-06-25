@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Query
 
+from src.database.crypto_market_duckdb import crypto_market_repo
 from src.services.binance_market_data import (
     get_candles as get_binance_candles,
     get_latest_prices as get_binance_latest_prices,
@@ -55,6 +56,18 @@ def get_candles(
     timeframe: Literal["1m", "5m", "15m", "1h", "4h", "1D"] = "1h",
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> list[dict[str, float]]:
+    if timeframe in {"1m", "5m", "15m", "1h", "4h"}:
+        try:
+            warehouse_rows = crypto_market_repo.load_candles(
+                symbol,
+                timeframe,
+                limit=limit,
+            )
+            if warehouse_rows:
+                return warehouse_rows
+        except Exception:
+            pass
+
     try:
         return get_binance_candles(symbol, timeframe, limit)
     except RuntimeError:
