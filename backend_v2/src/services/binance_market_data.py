@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -49,6 +50,44 @@ def get_candles(symbol: str, timeframe: str, limit: int) -> list[dict[str, float
             "low": float(row[3]),
             "close": float(row[4]),
             "volume": float(row[5]),
+        }
+        for row in payload
+    ]
+
+
+def get_klines_page(
+    symbol: str,
+    interval: str,
+    limit: int = 1000,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {
+        "symbol": symbol.upper(),
+        "interval": interval,
+        "limit": min(max(int(limit), 1), 1000),
+    }
+    if start_time is not None:
+        params["startTime"] = _to_milliseconds(start_time)
+    if end_time is not None:
+        params["endTime"] = _to_milliseconds(end_time)
+
+    payload = _request_json("/api/v3/klines", params)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    return [
+        {
+            "open_time": datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc),
+            "close_time": datetime.fromtimestamp(int(row[6]) / 1000, tz=timezone.utc),
+            "open": float(row[1]),
+            "high": float(row[2]),
+            "low": float(row[3]),
+            "close": float(row[4]),
+            "volume": float(row[5]),
+            "quote_volume": float(row[7]),
+            "trade_count": int(row[8]),
+            "taker_buy_base_volume": float(row[9]),
+            "taker_buy_quote_volume": float(row[10]),
+            "is_closed": int(row[6]) < now_ms,
         }
         for row in payload
     ]
@@ -109,3 +148,9 @@ def _normalize_depth_limit(limit: int) -> int:
     if limit <= 1000:
         return 1000
     return 5000
+
+
+def _to_milliseconds(value: datetime) -> int:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return int(value.timestamp() * 1000)
