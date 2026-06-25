@@ -7,7 +7,7 @@ Create Date: 2026-05-16
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision = "20260516_0002"
 down_revision = "20260429_0001"
@@ -16,8 +16,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_table("technical_cache")
-    op.drop_table("daily_ohlcv")
+    _drop_table_if_exists("technical_cache")
+    _drop_table_if_exists("daily_ohlcv")
+
+
+def _drop_table_if_exists(table_name: str) -> None:
+    if context.is_offline_mode():
+        op.drop_table(table_name)
+        return
+
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table(table_name):
+        op.drop_table(table_name)
 
 
 def downgrade() -> None:
