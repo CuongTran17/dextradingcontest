@@ -31,14 +31,14 @@ export async function fetchLatestCryptoPrices(
   try {
     const prices = await fetchJson<Partial<Record<CryptoSymbol, number>>>('/api/crypto/prices/latest')
     return symbols.reduce<Partial<Record<CryptoSymbol, number>>>((result, symbol) => {
-      result[symbol] = prices[symbol] ?? BASE_PRICES[symbol]
+      const price = prices[symbol]
+      if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
+        result[symbol] = price
+      }
       return result
     }, {})
   } catch {
-    return symbols.reduce<Partial<Record<CryptoSymbol, number>>>((result, symbol) => {
-      result[symbol] = BASE_PRICES[symbol]
-      return result
-    }, {})
+    return {}
   }
 }
 
@@ -87,25 +87,17 @@ export async function fetchCryptoCandlesWithSource(
   timeframe: Timeframe,
   count: number,
 ): Promise<{ candles: Candle[]; source: MarketDataSource }> {
-  try {
-    const candles = await fetchJson<Candle[]>(
-      `/api/crypto/candles?symbol=${symbol}&timeframe=${encodeURIComponent(timeframe)}&limit=${count}`,
-    )
-    return { candles, source: 'binance' }
-  } catch {
-    return { candles: getCryptoCandles(symbol, timeframe, count), source: 'mock' }
-  }
+  const candles = await fetchJson<Candle[]>(
+    `/api/crypto/candles?symbol=${symbol}&timeframe=${encodeURIComponent(timeframe)}&limit=${count}`,
+  )
+  return { candles, source: 'binance' }
 }
 
 export async function fetchCryptoOrderBook(
   symbol: CryptoSymbol,
   limit = 100,
 ): Promise<CryptoOrderBook> {
-  try {
-    return await fetchJson<CryptoOrderBook>(`/api/crypto/orderbook?symbol=${symbol}&limit=${limit}`)
-  } catch {
-    return getMockOrderBook(symbol, limit)
-  }
+  return fetchJson<CryptoOrderBook>(`/api/crypto/orderbook?symbol=${symbol}&limit=${limit}`)
 }
 
 export function getMockOrderBook(symbol: CryptoSymbol, limit = 100): CryptoOrderBook {

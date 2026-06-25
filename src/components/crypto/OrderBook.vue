@@ -3,13 +3,11 @@
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Order Book</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ symbol }} · {{ book.source === 'binance' ? 'Live Binance Spot' : 'Mock fallback' }}
-        </p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ symbol }} - {{ statusText }}</p>
       </div>
       <div class="text-right text-xs text-gray-500 dark:text-gray-400">
-        <p>Spread {{ formatPrice(book.spread) }}</p>
-        <p>Mid {{ formatPrice(book.mid_price) }}</p>
+        <p>Spread {{ formatPrice(book?.spread) }}</p>
+        <p>Mid {{ formatPrice(book?.mid_price) }}</p>
       </div>
     </div>
 
@@ -58,7 +56,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { fetchCryptoOrderBook, getMockOrderBook } from '@/services/cryptoMarketData'
+import { fetchCryptoOrderBook } from '@/services/cryptoMarketData'
 import type { CryptoOrderBook, CryptoSymbol } from '@/types/crypto'
 
 const props = withDefaults(
@@ -69,16 +67,30 @@ const props = withDefaults(
   { limit: 100 },
 )
 
-const book = ref<CryptoOrderBook>(getMockOrderBook(props.symbol, props.limit))
-const visibleBids = computed(() => book.value.bids.slice(0, 12))
-const visibleAsks = computed(() => book.value.asks.slice(0, 12))
+const book = ref<CryptoOrderBook | null>(null)
+const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
+const statusText = computed(() => {
+  if (status.value === 'loading') return 'Loading Binance Spot'
+  if (status.value === 'unavailable') return 'Order book unavailable'
+  return 'Live Binance Spot'
+})
+const visibleBids = computed(() => book.value?.bids.slice(0, 12) ?? [])
+const visibleAsks = computed(() => book.value?.asks.slice(0, 12) ?? [])
 let refreshTimer: number | undefined
 
 async function refreshOrderBook() {
-  book.value = await fetchCryptoOrderBook(props.symbol, props.limit)
+  status.value = 'loading'
+  try {
+    book.value = await fetchCryptoOrderBook(props.symbol, props.limit)
+    status.value = 'ready'
+  } catch {
+    book.value = null
+    status.value = 'unavailable'
+  }
 }
 
-function formatPrice(value: number): string {
+function formatPrice(value?: number): string {
+  if (typeof value !== 'number') return '--'
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value)
 }
 
@@ -98,7 +110,7 @@ onMounted(() => {
 watch(
   () => props.symbol,
   () => {
-    book.value = getMockOrderBook(props.symbol, props.limit)
+    book.value = null
     void refreshOrderBook()
   },
 )

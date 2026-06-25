@@ -36,15 +36,12 @@ describe('cryptoMarketData', () => {
     await expect(fetchLatestCryptoPrices(['BTCUSDT'])).resolves.toEqual({ BTCUSDT: 65000 })
   })
 
-  it('falls back to mock order book when backend market depth is unavailable', async () => {
+  it('does not invent order book depth when backend market depth is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
 
-    const book = await fetchCryptoOrderBook('BTCUSDT', 10)
-
-    expect(book.source).toBe('mock')
-    expect(book.bids).toHaveLength(10)
-    expect(book.asks).toHaveLength(10)
-    expect(book.spread).toBeGreaterThan(0)
+    await expect(fetchCryptoOrderBook('BTCUSDT', 10)).rejects.toThrow(
+      'Crypto market data request failed: 503',
+    )
   })
 
   it('fetches candles from the backend crypto API', async () => {
@@ -64,12 +61,17 @@ describe('cryptoMarketData', () => {
     ])
   })
 
-  it('marks candles as mock when backend candles are unavailable', async () => {
+  it('does not invent candles when backend candles are unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
 
-    const result = await fetchCryptoCandlesWithSource('BTCUSDT', '1h', 3)
+    await expect(fetchCryptoCandlesWithSource('BTCUSDT', '1h', 3)).rejects.toThrow(
+      'Crypto market data request failed: 503',
+    )
+  })
 
-    expect(result.source).toBe('mock')
-    expect(result.candles).toHaveLength(3)
+  it('returns no fake latest prices when the backend is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
+
+    await expect(fetchLatestCryptoPrices(['ETHUSDT'])).resolves.toEqual({})
   })
 })

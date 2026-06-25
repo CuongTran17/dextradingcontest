@@ -32,7 +32,7 @@
           :latest-price="latestPrice"
           :error="orderError"
           :submitting="orderSubmitting"
-          :disabled="accountLoading || !account"
+          :disabled="accountLoading || priceLoading || latestPrice <= 0 || !account"
           @submit="submitOrder"
         />
       </div>
@@ -57,7 +57,7 @@ import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS, DEFAULT_CRYPTO_SYMBOL } from '@/constants/cryptoAssets'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { ApiError } from '@/services/httpClient'
-import { fetchLatestCryptoPrices, getLatestCryptoPrice } from '@/services/cryptoMarketData'
+import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
 import {
   getCryptoAccount,
   joinCryptoContest,
@@ -71,14 +71,15 @@ const timeframe = ref<Timeframe>('1h')
 const orderError = ref('')
 const accountError = ref('')
 const accountLoading = ref(true)
+const priceLoading = ref(true)
 const orderSubmitting = ref(false)
 const account = ref<TradingAccount | null>(null)
 const livePrices = ref<Record<CryptoSymbol, number>>({
-  BTCUSDT: getLatestCryptoPrice('BTCUSDT'),
-  ETHUSDT: getLatestCryptoPrice('ETHUSDT'),
-  SOLUSDT: getLatestCryptoPrice('SOLUSDT'),
-  XRPUSDT: getLatestCryptoPrice('XRPUSDT'),
-  BNBUSDT: getLatestCryptoPrice('BNBUSDT'),
+  BTCUSDT: 0,
+  ETHUSDT: 0,
+  SOLUSDT: 0,
+  XRPUSDT: 0,
+  BNBUSDT: 0,
 })
 let priceTimer: number | undefined
 
@@ -145,6 +146,7 @@ async function loadAccount() {
 }
 
 async function refreshLatestPrices() {
+  priceLoading.value = true
   const prices = await fetchLatestCryptoPrices([
     'BTCUSDT',
     'ETHUSDT',
@@ -153,12 +155,13 @@ async function refreshLatestPrices() {
     'BNBUSDT',
   ])
   livePrices.value = {
-    BTCUSDT: prices.BTCUSDT ?? getLatestCryptoPrice('BTCUSDT'),
-    ETHUSDT: prices.ETHUSDT ?? getLatestCryptoPrice('ETHUSDT'),
-    SOLUSDT: prices.SOLUSDT ?? getLatestCryptoPrice('SOLUSDT'),
-    XRPUSDT: prices.XRPUSDT ?? getLatestCryptoPrice('XRPUSDT'),
-    BNBUSDT: prices.BNBUSDT ?? getLatestCryptoPrice('BNBUSDT'),
+    BTCUSDT: prices.BTCUSDT ?? livePrices.value.BTCUSDT,
+    ETHUSDT: prices.ETHUSDT ?? livePrices.value.ETHUSDT,
+    SOLUSDT: prices.SOLUSDT ?? livePrices.value.SOLUSDT,
+    XRPUSDT: prices.XRPUSDT ?? livePrices.value.XRPUSDT,
+    BNBUSDT: prices.BNBUSDT ?? livePrices.value.BNBUSDT,
   }
+  priceLoading.value = false
 }
 
 onMounted(() => {

@@ -81,3 +81,48 @@ def test_candles_use_duckdb_before_binance(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == expected
+
+
+def test_latest_prices_fall_back_to_latest_duckdb_closes(monkeypatch):
+    from src.routes import crypto
+
+    monkeypatch.setattr(
+        crypto,
+        "get_binance_latest_prices",
+        lambda symbols: (_ for _ in ()).throw(RuntimeError("Binance unavailable")),
+    )
+    monkeypatch.setattr(
+        crypto.crypto_market_repo,
+        "load_candles",
+        lambda symbol, interval, *, limit: [
+            {
+                "time": 1,
+                "open": 1500.0,
+                "high": 1510.0,
+                "low": 1490.0,
+                "close": 1505.0 if symbol == "ETHUSDT" else 100.0,
+                "volume": 10.0,
+            }
+        ],
+    )
+    client = make_client()
+
+    response = client.get("/api/crypto/prices/latest")
+
+    assert response.status_code == 200
+    assert response.json()["ETHUSDT"] == 1505.0
+
+
+def test_orderbook_returns_503_instead_of_mock_depth(monkeypatch):
+    from src.routes import crypto
+
+    monkeypatch.setattr(
+        crypto,
+        "get_binance_order_book",
+        lambda symbol, limit: (_ for _ in ()).throw(RuntimeError("Binance unavailable")),
+    )
+    client = make_client()
+
+    response = client.get("/api/crypto/orderbook?symbol=ETHUSDT&limit=20")
+
+    assert response.status_code == 503

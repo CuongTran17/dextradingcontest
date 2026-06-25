@@ -4,7 +4,7 @@
       <div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ symbol }} Chart</h2>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ timeframe }} {{ dataSource === 'binance' ? 'Live Binance Spot' : 'mock fallback' }} candles
+          {{ timeframe }} {{ statusText }}
         </p>
       </div>
     </div>
@@ -14,10 +14,10 @@
 
 <script setup lang="ts">
 import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { fetchCryptoCandlesWithSource, getCryptoCandles } from '@/services/cryptoMarketData'
-import type { CryptoSymbol, MarketDataSource, Timeframe } from '@/types/crypto'
+import { fetchCryptoCandlesWithSource } from '@/services/cryptoMarketData'
+import type { Candle, CryptoSymbol, Timeframe } from '@/types/crypto'
 
 const props = defineProps<{
   symbol: CryptoSymbol
@@ -25,11 +25,16 @@ const props = defineProps<{
 }>()
 
 const chartEl = ref<HTMLElement | null>(null)
-const dataSource = ref<MarketDataSource>('mock')
+const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
+const statusText = computed(() => {
+  if (status.value === 'loading') return 'Loading market candles'
+  if (status.value === 'unavailable') return 'Market candles unavailable'
+  return 'Binance Spot / warehouse candles'
+})
 let chart: IChartApi | null = null
 let series: ReturnType<IChartApi['addSeries']> | null = null
 
-function setChartData(candles = getCryptoCandles(props.symbol, props.timeframe, 80)) {
+function setChartData(candles: Candle[]) {
   series?.setData(
     candles.map((candle) => ({
       ...candle,
@@ -58,10 +63,15 @@ async function renderChart() {
     })
   }
 
-  setChartData()
-  const result = await fetchCryptoCandlesWithSource(props.symbol, props.timeframe, 80)
-  dataSource.value = result.source
-  setChartData(result.candles)
+  status.value = 'loading'
+  try {
+    const result = await fetchCryptoCandlesWithSource(props.symbol, props.timeframe, 80)
+    setChartData(result.candles)
+    status.value = 'ready'
+  } catch {
+    series?.setData([])
+    status.value = 'unavailable'
+  }
 }
 
 onMounted(() => void renderChart())
