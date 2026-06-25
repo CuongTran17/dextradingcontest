@@ -8,7 +8,6 @@ from fastapi import APIRouter, Response
 from sqlalchemy import text
 
 from src.database.db import AsyncSessionLocal
-from src.database.redis_db import check_redis_health
 from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -47,16 +46,6 @@ async def _check_migrations() -> dict[str, Any]:
         return {"status": "error", "error": exc.__class__.__name__}
 
 
-def _check_redis() -> dict[str, Any]:
-    try:
-        available = check_redis_health()
-    except Exception as exc:
-        logger.exception("Health Redis check failed")
-        return {"status": "degraded", "error": exc.__class__.__name__}
-
-    return {"status": "ok" if available else "degraded", "optional": True}
-
-
 def _status_from_checks(checks: dict[str, dict[str, Any]]) -> str:
     required = [checks["database"], checks["migrations"]]
     if any(item["status"] == "error" for item in required):
@@ -70,7 +59,7 @@ def _status_from_checks(checks: dict[str, dict[str, Any]]) -> str:
 async def liveness() -> dict[str, Any]:
     return {
         "status": "ok",
-        "service": "backend_v2",
+        "service": "crypto-trading-contest-api",
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -80,7 +69,6 @@ async def readiness(response: Response) -> dict[str, Any]:
     checks = {
         "database": await _check_database(),
         "migrations": await _check_migrations(),
-        "redis": _check_redis(),
     }
     status = _status_from_checks(checks)
     if status == "error":

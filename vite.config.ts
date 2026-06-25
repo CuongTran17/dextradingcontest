@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
@@ -23,13 +23,6 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      // Proxy DNSE REST API calls through Vite to avoid browser CORS in dev.
-      '/dnse-proxy': {
-        target: 'https://services.entrade.com.vn',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => path.replace(/^\/dnse-proxy/, ''),
-      },
     },
   },
   build: {
@@ -38,7 +31,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           vue: ['vue', 'vue-router'],
-          apexcharts: ['apexcharts', 'vue3-apexcharts'],
           lightweightCharts: ['lightweight-charts'],
         },
       },
@@ -49,5 +41,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     clearMocks: true,
     restoreMocks: true,
+    exclude: [...configDefaults.exclude, 'legacy/**'],
   },
 })

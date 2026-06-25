@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { isAdmin, isLoggedIn, isPremium } from '@/services/authApi'
+import { isAdmin, isLoggedIn } from '@/services/authApi'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -43,24 +43,6 @@ const router = createRouter({
       name: 'VirtualPortfolio',
       component: () => import('../views/VirtualPortfolio.vue'),
       meta: { title: 'Virtual Portfolio', requiresAuth: true },
-    },
-    {
-      path: '/premium',
-      name: 'PremiumUpgrade',
-      component: () => import('../views/PremiumUpgrade.vue'),
-      meta: { title: 'Premium Upgrade', requiresAuth: true },
-    },
-    {
-      path: '/premium/checkout',
-      name: 'PremiumCheckout',
-      component: () => import('../views/PremiumCheckout.vue'),
-      meta: { title: 'Premium Checkout', requiresAuth: true },
-    },
-    {
-      path: '/premium/sepay-return',
-      name: 'PremiumSePayReturn',
-      component: () => import('../views/PremiumSePayReturn.vue'),
-      meta: { title: 'Premium Payment Result', requiresAuth: true },
     },
     {
       path: '/admin',
@@ -132,10 +114,6 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresAdmin && !isAdmin()) {
     return next({ name: 'CryptoDashboard' })
-  }
-
-  if (to.meta.requiresPremium && !isPremium()) {
-    return next({ name: 'PremiumUpgrade' })
   }
 
   next()

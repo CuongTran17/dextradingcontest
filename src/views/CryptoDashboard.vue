@@ -11,9 +11,9 @@
       >
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ asset.displayName }}</p>
         <h2 class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
-          {{ formatCurrency(getLatestCryptoPrice(asset.symbol)) }}
+          {{ formatAssetPrice(asset.symbol) }}
         </h2>
-        <p class="mt-3 text-xs font-medium text-emerald-600">Simulated market feed</p>
+        <p class="mt-3 text-xs font-medium text-emerald-600">Binance Spot market feed</p>
       </router-link>
     </section>
 
@@ -63,11 +63,18 @@ import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS } from '@/constants/cryptoAssets'
 import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { isLoggedIn } from '@/services/authApi'
-import { getLatestCryptoPrice } from '@/services/cryptoMarketData'
+import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
 import { getCryptoAccount } from '@/services/cryptoTradingApi'
-import type { TradingAccount } from '@/types/crypto'
+import type { CryptoSymbol, TradingAccount } from '@/types/crypto'
 
 const account = ref<TradingAccount | null>(null)
+const assetPrices = ref<Record<CryptoSymbol, number>>({
+  BTCUSDT: 0,
+  ETHUSDT: 0,
+  SOLUSDT: 0,
+  XRPUSDT: 0,
+  BNBUSDT: 0,
+})
 const accountMessage = ref(
   isLoggedIn()
     ? 'Loading your practice account...'
@@ -109,6 +116,14 @@ const leaderboardRows = computed<LeaderboardRow[]>(() => {
 })
 
 onMounted(async () => {
+  const prices = await fetchLatestCryptoPrices(CRYPTO_ASSETS.map((asset) => asset.symbol))
+  for (const asset of CRYPTO_ASSETS) {
+    const price = prices[asset.symbol]
+    if (typeof price === 'number' && price > 0) {
+      assetPrices.value[asset.symbol] = price
+    }
+  }
+
   if (!isLoggedIn()) return
   try {
     account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
@@ -116,6 +131,11 @@ onMounted(async () => {
     accountMessage.value = error instanceof Error ? error.message : 'Unable to load practice account'
   }
 })
+
+function formatAssetPrice(symbol: CryptoSymbol): string {
+  const price = assetPrices.value[symbol]
+  return price > 0 ? formatCurrency(price) : '--'
+}
 
 function accountMetrics(current: TradingAccount | null) {
   const equity = current?.equity ?? 0

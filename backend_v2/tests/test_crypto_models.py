@@ -1,5 +1,6 @@
 from sqlalchemy import Numeric, UniqueConstraint
 
+from src.database.base import Base
 from src.database.crypto_models import (
     AccountBalance,
     ContestAsset,
@@ -10,6 +11,7 @@ from src.database.crypto_models import (
     TradingAccount,
     TradingOrder,
 )
+from src.database.user_models import User
 
 
 def _unique_constraint_names(model) -> set[str]:
@@ -41,3 +43,19 @@ def test_money_columns_use_fixed_precision():
     ]
 
     assert all(isinstance(column.type, Numeric) for column in columns)
+
+
+def test_production_metadata_contains_only_user_and_crypto_tables():
+    assert User.__tablename__ == "users"
+    assert {
+        "users",
+        "crypto_assets",
+        "contests",
+        "contest_assets",
+        "contest_participants",
+        "trading_accounts",
+        "account_balances",
+        "crypto_positions",
+        "crypto_orders",
+        "crypto_trade_fills",
+    } == set(Base.metadata.tables)

@@ -7,9 +7,6 @@
     "dev": "vite --port 5174 --strictPort",
     "backend:dev": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe -m uvicorn src.main:app --reload",
     "crypto:backfill": ".\\.venv\\Scripts\\python.exe backend_v2\\scripts\\backfill_crypto_market.py",
-    "backend:ngrok": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe run_with_ngrok.py",
-    "etl:update": ".\\.venv\\Scripts\\python.exe -m etl.run_etl --run-mode incremental --tick-source lake",
-    "dev:after-etl": "npm run etl:update && npm run backend:dev",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
@@ -22,11 +19,9 @@
     "build:gh-pages": "NODE_ENV=production npm run build"
   },
   "dependencies": {
-    "apexcharts": "^4.4.0",
     "lightweight-charts": "^5.1.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0",
-    "vue3-apexcharts": "^1.8.0"
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
@@ -34,9 +29,9 @@
     "@types/node": "^22.10.7",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vitejs/plugin-vue-jsx": "^4.2.0",
-    "@vue/test-utils": "^2.4.6",
     "@vue/eslint-config-prettier": "^10.1.0",
     "@vue/eslint-config-typescript": "^14.3.0",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.7.0",
     "eslint": "^9.18.0",
     "eslint-plugin-vue": "^9.32.0",

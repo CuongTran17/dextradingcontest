@@ -92,10 +92,9 @@ import {
   LayoutDashboardIcon,
   ListIcon,
   LogoutIcon,
-  PieChartIcon,
   UserCircleIcon,
 } from '@/icons'
-import { isAdmin, isLoggedIn, isPremium, logout as authLogout } from '@/services/authApi'
+import { isAdmin, isLoggedIn, logout as authLogout } from '@/services/authApi'
 
 const route = useRoute()
 const router = useRouter()
@@ -119,10 +118,6 @@ const menuGroups = computed(() => {
     const userItems: { icon: any; name: string; path: string }[] = [
       { icon: UserCircleIcon, name: 'Profile', path: '/profile' },
     ]
-
-    if (!isPremium()) {
-      userItems.push({ icon: PieChartIcon, name: 'Premium', path: '/premium' })
-    }
 
     userItems.push({ icon: LogoutIcon, name: 'Sign Out', path: '/logout' })
     groups.push({ title: 'Account', items: userItems })

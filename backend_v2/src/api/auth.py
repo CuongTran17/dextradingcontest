@@ -19,7 +19,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from src.database.db import get_db
-from src.database.models import User
+from src.database.user_models import User
 from src.settings import get_settings
 
 logger = logging.getLogger(__name__)

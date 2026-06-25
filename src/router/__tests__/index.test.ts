@@ -28,7 +28,6 @@ describe('router guest access', () => {
 
   it.each([
     '/portfolio',
-    '/premium',
     '/profile',
     '/admin',
   ])('redirects guests from %s to signin with the original destination', async (path) => {
@@ -37,4 +36,13 @@ describe('router guest access', () => {
     expect(route.name).toBe('Signin')
     expect(route.query.redirect).toBe(path)
   })
+
+  it.each(['/premium', '/premium/checkout', '/premium/sepay-return'])(
+    'removes legacy premium route %s',
+    async (path) => {
+      const route = await navigateAsGuest(path)
+
+      expect(route.name).toBe('CryptoDashboard')
+    },
+  )
 })

@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from src.database.models import Base
+from src.database.base import Base
 
 
 def _utcnow() -> datetime:

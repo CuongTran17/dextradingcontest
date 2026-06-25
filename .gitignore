@@ -32,6 +32,10 @@ coverage
 # Development scratch and archived files (not needed in repo)
 dev-archive/
 legacy/
+!legacy/
+legacy/*
+!legacy/frontend/
+!legacy/frontend/**
 vnstock-agent-guide/
 .vercel
 
@@ -46,9 +50,8 @@ run_daily_pipeline.bat
 # Test files (kept locally, not part of repo)
 test_*.py
 *_test.py
-!backend_v2/tests/test_dnse_market_data.py
-!backend_v2/tests/test_dnse_realtime_provider.py
-!backend_v2/tests/test_stocks_dnse_integration.py
+!backend_v2/tests/test_crypto_app_surface.py
+!backend_v2/tests/test_admin_users.py
 
 # Generated data files (run ETL pipeline to regenerate)
 market_data.csv

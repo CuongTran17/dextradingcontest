@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.api.auth import require_auth
 from src.database.db import get_db
-from src.database.models import User
+from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import (
     MarketOrderCreate,

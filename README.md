@@ -4,6 +4,10 @@ This project is an educational crypto trading contest simulator. Users receive v
 
 All balances, positions, trades, PnL, ROI, contest rewards, and leaderboard results are simulated. They have no real-money value. The app does not provide investment advice, exchange trading execution, deposits, withdrawals, or mainnet swaps.
 
+The production application is crypto-only. Earlier stock, DNSE, ETL, AI, payment, and premium
+features have been removed from the runtime. Their frontend code is retained under
+`legacy/frontend/` for reference and is excluded from production builds.
+
 ## Implemented Features
 
 - Vue 3, TypeScript, Vite, Tailwind CSS frontend.
@@ -32,6 +36,10 @@ balances, positions, or trading history.
 
 MySQL and DuckDB are intentionally separate. Transactional user and trading state belongs in
 MySQL, while high-volume analytical market data belongs in DuckDB.
+
+The existing MySQL database may still contain tables created by the earlier project. Those
+tables are not queried by the crypto runtime and were intentionally left untouched to avoid
+destructive schema changes.
 
 ## Market Data
 
@@ -161,4 +169,5 @@ npm.cmd run build
 
 ## Safety
 
-This app must not include real deposits, withdrawals, mainnet swaps, exchange order execution, automated trading signals, guaranteed returns, or real-money payout flows.
+This app must not include real deposits, withdrawals, mainnet swaps, exchange order execution,
+automated trading signals, guaranteed returns, payment or premium flows, or real-money payouts.

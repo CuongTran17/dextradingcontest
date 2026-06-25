@@ -19,7 +19,9 @@ if str(REPO_ROOT) not in sys.path:
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(REPO_ROOT / ".env")
 
-from src.database.models import Base  # noqa: E402
+from src.database.base import Base  # noqa: E402
+from src.database import crypto_models as _crypto_models  # noqa: E402,F401
+from src.database import user_models as _user_models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:
@@ -29,7 +31,7 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    return os.getenv("MYSQL_URL", "mysql+mysqlconnector://root:@localhost/vnstock_data")
+    return os.getenv("MYSQL_URL", "mysql+mysqlconnector://root:@localhost/crypto_dex")
 
 
 def run_migrations_offline() -> None:

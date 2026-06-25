@@ -1,4 +1,4 @@
-"""Baseline schema from SQLAlchemy models.
+"""Create the retained user table.
 
 Revision ID: 20260429_0001
 Revises:
@@ -6,16 +6,9 @@ Create Date: 2026-04-29
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
+import sqlalchemy as sa
 from alembic import op
-
-BASE_DIR = Path(__file__).resolve().parents[2]
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-
-from src.database.models import Base  # noqa: E402
+from sqlalchemy.dialects import mysql
 
 revision = "20260429_0001"
 down_revision = None
@@ -24,10 +17,36 @@ depends_on = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    Base.metadata.create_all(bind=bind)
+    op.create_table(
+        "users",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("phone", sa.String(length=20), nullable=True),
+        sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column("password_salt", sa.String(length=255), nullable=True),
+        sa.Column("first_name", sa.String(length=120), nullable=True),
+        sa.Column("last_name", sa.String(length=120), nullable=True),
+        sa.Column("fullname", sa.String(length=255), nullable=False),
+        sa.Column("avatar_data", mysql.LONGTEXT(), nullable=True),
+        sa.Column(
+            "role",
+            sa.Enum("user", "premium", "admin", name="user_role_enum"),
+            nullable=False,
+            server_default="user",
+        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("is_locked", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("locked_reason", sa.String(length=500), nullable=True),
+        sa.Column("last_login_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("email"),
+        sa.UniqueConstraint("phone"),
+    )
+    op.create_index("ix_users_email", "users", ["email"])
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    Base.metadata.drop_all(bind=bind)
+    op.drop_index("ix_users_email", table_name="users")
+    op.drop_table("users")

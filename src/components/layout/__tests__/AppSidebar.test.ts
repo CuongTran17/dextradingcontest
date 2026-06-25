@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AppSidebar from '../AppSidebar.vue'
 import { DEFAULT_TRADE_PATH } from '@/constants/navigation'
+import { isLoggedIn } from '@/services/authApi'
 
 vi.mock('@/composables/useSidebar', () => ({
   useSidebar: () => ({
@@ -25,6 +26,10 @@ vi.mock('@/services/authApi', () => ({
 }))
 
 describe('AppSidebar', () => {
+  beforeEach(() => {
+    vi.mocked(isLoggedIn).mockReturnValue(false)
+  })
+
   it('uses centralized default crypto trade path', () => {
     const wrapper = mount(AppSidebar, {
       global: {
@@ -35,5 +40,20 @@ describe('AppSidebar', () => {
     })
 
     expect(wrapper.html()).toContain(`href="${DEFAULT_TRADE_PATH}"`)
+  })
+
+  it('does not render premium or stock navigation', () => {
+    vi.mocked(isLoggedIn).mockReturnValue(true)
+    const wrapper = mount(AppSidebar, {
+      global: {
+        stubs: {
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('Premium')
+    expect(wrapper.text()).not.toContain('Stocks')
+    expect(wrapper.text()).not.toContain('DNSE')
   })
 })

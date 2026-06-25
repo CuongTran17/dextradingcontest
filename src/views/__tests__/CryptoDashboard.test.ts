@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getCryptoAccount } from '@/services/cryptoTradingApi'
+import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
 import CryptoDashboard from '@/views/CryptoDashboard.vue'
 
 vi.mock('@/services/authApi', () => ({
@@ -10,6 +11,11 @@ vi.mock('@/services/authApi', () => ({
 
 vi.mock('@/services/cryptoTradingApi', () => ({
   getCryptoAccount: vi.fn(),
+}))
+
+vi.mock('@/services/cryptoMarketData', () => ({
+  fetchLatestCryptoPrices: vi.fn(),
+  getLatestCryptoPrice: vi.fn(() => 3420),
 }))
 
 vi.mock('@/components/crypto/PortfolioSummary.vue', () => ({
@@ -38,6 +44,13 @@ describe('CryptoDashboard', () => {
       positions: [],
       orders: [],
     })
+    vi.mocked(fetchLatestCryptoPrices).mockResolvedValue({
+      BTCUSDT: 59500,
+      ETHUSDT: 1570,
+      SOLUSDT: 66,
+      XRPUSDT: 1.04,
+      BNBUSDT: 558,
+    })
   })
 
   it('shows the backend account summary for a signed-in user', async () => {
@@ -52,5 +65,20 @@ describe('CryptoDashboard', () => {
 
     expect(getCryptoAccount).toHaveBeenCalledWith('practice-arena')
     expect(wrapper.get('[data-test="portfolio-summary"]').text()).toContain('10100')
+  })
+
+  it('renders latest backend prices instead of hardcoded fallback prices', async () => {
+    const wrapper = mount(CryptoDashboard, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(fetchLatestCryptoPrices).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('$1,570.00')
+    expect(wrapper.text()).not.toContain('$3,420.00')
   })
 })
