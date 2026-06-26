@@ -41,13 +41,6 @@ vi.mock('@/services/cryptoMarketData', () => ({
     XRPUSDT: 0.5,
     BNBUSDT: 600,
   }),
-  getLatestCryptoPrice: vi.fn((symbol: string) => ({
-    BTCUSDT: 65000,
-    ETHUSDT: 3000,
-    SOLUSDT: 150,
-    XRPUSDT: 0.5,
-    BNBUSDT: 600,
-  })[symbol]),
 }))
 
 vi.mock('@/services/cryptoRealtime', () => ({
@@ -148,5 +141,12 @@ describe('CryptoTrade', () => {
     expect(fetchLatestCryptoPrices).toHaveBeenCalledTimes(1)
     expect(window.setInterval).not.toHaveBeenCalled()
     expect(cryptoRealtimeState.prices.BTCUSDT).toBe(66000)
+  })
+
+  it('shows realtime connection status in the trade header', async () => {
+    const wrapper = mount(CryptoTrade)
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="realtime-status"]').text()).toContain('Live')
   })
 })

@@ -15,7 +15,6 @@ vi.mock('@/services/cryptoTradingApi', () => ({
 
 vi.mock('@/services/cryptoMarketData', () => ({
   fetchLatestCryptoPrices: vi.fn(),
-  getLatestCryptoPrice: vi.fn(() => 3420),
 }))
 
 vi.mock('@/components/crypto/PortfolioSummary.vue', () => ({

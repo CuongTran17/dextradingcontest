@@ -5,7 +5,17 @@
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Trade Simulator</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ currentSymbol }}</p>
+        <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+          <span class="text-gray-500 dark:text-gray-400">{{ currentSymbol }}</span>
+          <span
+            data-test="realtime-status"
+            class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+            :class="realtimeStatusClass"
+          >
+            <span class="h-1.5 w-1.5 rounded-full" :class="realtimeDotClass"></span>
+            {{ realtimeStatusText }}
+          </span>
+        </div>
       </div>
       <div class="inline-flex w-fit rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
         <button
@@ -97,6 +107,28 @@ const currentSymbol = computed<CryptoSymbol>(() => {
 const latestPrice = computed(
   () => cryptoRealtimeState.prices[currentSymbol.value] ?? fallbackPrices.value[currentSymbol.value],
 )
+const realtimeStatusText = computed(() => {
+  if (cryptoRealtimeState.status === 'connected') return 'Live'
+  if (cryptoRealtimeState.status === 'connecting') return 'Connecting'
+  if (cryptoRealtimeState.status === 'reconnecting') return 'Reconnecting'
+  return 'REST fallback'
+})
+const realtimeStatusClass = computed(() => {
+  if (cryptoRealtimeState.status === 'connected') {
+    return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+  }
+  if (cryptoRealtimeState.status === 'connecting' || cryptoRealtimeState.status === 'reconnecting') {
+    return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+  }
+  return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+})
+const realtimeDotClass = computed(() => {
+  if (cryptoRealtimeState.status === 'connected') return 'bg-emerald-500'
+  if (cryptoRealtimeState.status === 'connecting' || cryptoRealtimeState.status === 'reconnecting') {
+    return 'bg-amber-500'
+  }
+  return 'bg-gray-400'
+})
 const metrics = computed(() => {
   const current = account.value
   const equity = current?.equity ?? 0
