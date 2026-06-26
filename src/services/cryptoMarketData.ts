@@ -1,4 +1,12 @@
-import type { Candle, CryptoOrderBook, CryptoSymbol, MarketDataSource, Timeframe } from '@/types/crypto'
+import type {
+  Candle,
+  CryptoIndicator,
+  CryptoIndicatorResponse,
+  CryptoOrderBook,
+  CryptoSymbol,
+  MarketDataSource,
+  Timeframe,
+} from '@/types/crypto'
 
 export async function fetchLatestCryptoPrices(
   symbols: CryptoSymbol[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT'],
@@ -42,6 +50,17 @@ export async function fetchCryptoOrderBook(
   limit = 100,
 ): Promise<CryptoOrderBook> {
   return fetchJson<CryptoOrderBook>(`/api/crypto/orderbook?symbol=${symbol}&limit=${limit}`)
+}
+
+export async function fetchCryptoIndicator(
+  symbol: CryptoSymbol,
+  timeframe: Exclude<Timeframe, '1D'>,
+  indicator: CryptoIndicator,
+  limit = 300,
+): Promise<CryptoIndicatorResponse> {
+  return fetchJson<CryptoIndicatorResponse>(
+    `/api/crypto/indicators?symbol=${symbol}&timeframe=${timeframe}&indicator=${indicator}&limit=${limit}`,
+  )
 }
 
 async function fetchJson<T>(path: string): Promise<T> {

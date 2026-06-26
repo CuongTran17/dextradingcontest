@@ -30,6 +30,7 @@ class FakeRepo:
         self.saved = []
         self.states = []
         self.materialized = []
+        self.indicators = []
         self.gaps = []
 
     def get_ingestion_state(self, symbol, interval):
@@ -69,6 +70,10 @@ class FakeRepo:
         self.materialized.append(symbol)
         return 0
 
+    def materialize_indicators(self, symbol):
+        self.indicators.append(symbol)
+        return 0
+
 
 def test_backfill_pages_forward_and_stores_closed_candles_only():
     now = datetime(2026, 6, 25, 0, 5, 30, tzinfo=timezone.utc)
@@ -95,6 +100,7 @@ def test_backfill_pages_forward_and_stores_closed_candles_only():
     assert calls[1] == start + timedelta(minutes=2)
     assert len(repo.saved) == 3
     assert repo.materialized == ["BTCUSDT"]
+    assert repo.indicators == ["BTCUSDT"]
     assert repo.states[-1][3] == "success"
 
 

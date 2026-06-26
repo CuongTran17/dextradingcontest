@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -86,6 +87,31 @@ class CryptoMarketDuckDB:
                     status VARCHAR NOT NULL,
                     last_error VARCHAR,
                     PRIMARY KEY (exchange, market_type, symbol, interval)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crypto_indicators (
+                    exchange VARCHAR NOT NULL,
+                    market_type VARCHAR NOT NULL,
+                    symbol VARCHAR NOT NULL,
+                    interval VARCHAR NOT NULL,
+                    indicator VARCHAR NOT NULL,
+                    params_json VARCHAR NOT NULL,
+                    open_time TIMESTAMP NOT NULL,
+                    values_json VARCHAR NOT NULL,
+                    source VARCHAR NOT NULL,
+                    calculated_at TIMESTAMP NOT NULL,
+                    PRIMARY KEY (
+                        exchange,
+                        market_type,
+                        symbol,
+                        interval,
+                        indicator,
+                        params_json,
+                        open_time
+                    )
                 )
                 """
             )
@@ -443,6 +469,195 @@ class CryptoMarketDuckDB:
             for row in rows
         ]
 
+    def materialize_macd(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        fast: int = 12,
+        slow: int = 26,
+        signal: int = 9,
+        source_limit: int | None = None,
+    ) -> int:
+        candles = self._load_indicator_source_candles(symbol, interval, limit=source_limit)
+        if not candles:
+            return 0
+
+        frame = pd.DataFrame(candles)
+        close = frame["close"].astype(float)
+        fast_ema = close.ewm(span=fast, adjust=False).mean()
+        slow_ema = close.ewm(span=slow, adjust=False).mean()
+        macd = fast_ema - slow_ema
+        signal_line = macd.ewm(span=signal, adjust=False).mean()
+        histogram = macd - signal_line
+        params_json = _indicator_params_json({"fast": fast, "slow": slow, "signal": signal})
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        rows = [
+            (
+                "binance",
+                "spot",
+                symbol.upper(),
+                interval,
+                "MACD",
+                params_json,
+                _utc_naive(row["open_time"]),
+                json.dumps(
+                    {
+                        "macd": float(macd.iloc[index]),
+                        "signal": float(signal_line.iloc[index]),
+                        "histogram": float(histogram.iloc[index]),
+                    },
+                    separators=(",", ":"),
+                ),
+                "derived-candles",
+                now,
+            )
+            for index, row in frame.iterrows()
+        ]
+        self._upsert_indicator_rows(rows)
+        return len(rows)
+
+    def load_indicator(
+        self,
+        symbol: str,
+        interval: str,
+        indicator: str,
+        *,
+        limit: int = 300,
+        params: dict[str, int] | None = None,
+    ) -> dict[str, Any]:
+        normalized_indicator = indicator.upper()
+        normalized_params = params or (
+            {"fast": 12, "slow": 26, "signal": 9}
+            if normalized_indicator == "MACD"
+            else {}
+        )
+        params_json = _indicator_params_json(normalized_params)
+        with self.connect() as conn:
+            records = list(
+                reversed(
+                    conn.execute(
+                        """
+                        SELECT open_time, values_json
+                        FROM crypto_indicators
+                        WHERE exchange = 'binance' AND market_type = 'spot'
+                          AND symbol = ? AND interval = ?
+                          AND indicator = ? AND params_json = ?
+                        ORDER BY open_time DESC LIMIT ?
+                        """,
+                        [
+                            symbol.upper(),
+                            interval,
+                            normalized_indicator,
+                            params_json,
+                            max(1, int(limit)),
+                        ],
+                    ).fetchall()
+                )
+            )
+
+        return {
+            "symbol": symbol.upper(),
+            "timeframe": interval,
+            "indicator": normalized_indicator,
+            "params": normalized_params,
+            "points": [
+                {
+                    "time": int(_utc_aware(row[0]).timestamp()),
+                    **json.loads(row[1]),
+                }
+                for row in records
+            ],
+        }
+
+    def materialize_indicators(
+        self,
+        symbol: str,
+        *,
+        intervals: tuple[str, ...] = ("1m", "5m", "15m", "1h", "4h"),
+    ) -> int:
+        return sum(self.materialize_macd(symbol, interval) for interval in intervals)
+
+    def _load_indicator_source_candles(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        limit_clause = ""
+        params: list[Any] = [symbol.upper(), interval]
+        if limit is not None:
+            limit_clause = "ORDER BY open_time DESC LIMIT ?"
+            params.append(max(1, int(limit)))
+        else:
+            limit_clause = "ORDER BY open_time"
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT open_time, close
+                FROM (
+                    SELECT open_time, close
+                    FROM crypto_candles
+                    WHERE exchange = 'binance' AND market_type = 'spot'
+                      AND symbol = ? AND interval = ? AND is_closed = TRUE
+                    {limit_clause}
+                )
+                ORDER BY open_time
+                """,
+                params,
+            ).fetchall()
+        return [
+            {"open_time": _utc_aware(row[0]), "close": float(row[1])}
+            for row in rows
+        ]
+
+    def _upsert_indicator_rows(self, rows: list[tuple[Any, ...]]) -> None:
+        if not rows:
+            return
+        columns = [
+            "exchange",
+            "market_type",
+            "symbol",
+            "interval",
+            "indicator",
+            "params_json",
+            "open_time",
+            "values_json",
+            "source",
+            "calculated_at",
+        ]
+        frame = pd.DataFrame(rows, columns=columns)
+        with self.connect() as conn:
+            conn.register("incoming_crypto_indicators", frame)
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute(
+                    """
+                    DELETE FROM crypto_indicators AS target
+                    USING incoming_crypto_indicators AS incoming
+                    WHERE target.exchange = incoming.exchange
+                      AND target.market_type = incoming.market_type
+                      AND target.symbol = incoming.symbol
+                      AND target.interval = incoming.interval
+                      AND target.indicator = incoming.indicator
+                      AND target.params_json = incoming.params_json
+                      AND target.open_time = incoming.open_time
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO crypto_indicators
+                    SELECT * FROM incoming_crypto_indicators
+                    """
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+            finally:
+                conn.unregister("incoming_crypto_indicators")
+
 
 class LazyCryptoMarketDuckDB:
     def __init__(self):
@@ -458,3 +673,7 @@ class LazyCryptoMarketDuckDB:
 
 
 crypto_market_repo = LazyCryptoMarketDuckDB()
+
+
+def _indicator_params_json(params: dict[str, int]) -> str:
+    return json.dumps(params, sort_keys=True, separators=(",", ":"))

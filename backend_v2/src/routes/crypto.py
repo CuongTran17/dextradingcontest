@@ -89,6 +89,23 @@ def get_candles(
         raise HTTPException(status_code=503, detail="Crypto candles are temporarily unavailable") from exc
 
 
+@router.get("/indicators")
+def get_indicator(
+    symbol: CryptoSymbol,
+    timeframe: Literal["1m", "5m", "15m", "1h", "4h"] = "1m",
+    indicator: Literal["MACD"] = "MACD",
+    limit: int = Query(default=300, ge=1, le=1000),
+) -> dict[str, Any]:
+    try:
+        result = crypto_market_repo.load_indicator(symbol, timeframe, indicator, limit=limit)
+        if not result["points"]:
+            crypto_market_repo.materialize_macd(symbol, timeframe, source_limit=max(limit + 200, 300))
+            result = crypto_market_repo.load_indicator(symbol, timeframe, indicator, limit=limit)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Crypto indicator data is temporarily unavailable") from exc
+
+
 @router.get("/orderbook")
 def get_orderbook(
     request: Request,

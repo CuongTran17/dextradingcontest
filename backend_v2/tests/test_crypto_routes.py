@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 
 from src.routes.crypto import router
 
@@ -108,9 +109,9 @@ def test_candles_use_duckdb_before_binance(monkeypatch):
         }
     ]
     monkeypatch.setattr(
-        crypto.crypto_market_repo,
-        "load_candles",
-        lambda symbol, interval, *, limit: expected,
+        crypto,
+        "crypto_market_repo",
+        SimpleNamespace(load_candles=lambda symbol, interval, *, limit: expected),
     )
     monkeypatch.setattr(
         crypto,
@@ -125,6 +126,49 @@ def test_candles_use_duckdb_before_binance(monkeypatch):
     assert response.json() == expected
 
 
+def test_indicators_materialize_macd_when_cache_is_empty(monkeypatch):
+    from src.routes import crypto
+
+    calls = []
+
+    def load_indicator(symbol, interval, indicator, *, limit):
+        calls.append(("load", symbol, interval, indicator, limit))
+        if len([call for call in calls if call[0] == "load"]) == 1:
+            return {
+                "symbol": symbol,
+                "timeframe": interval,
+                "indicator": indicator,
+                "params": {"fast": 12, "slow": 26, "signal": 9},
+                "points": [],
+            }
+        return {
+            "symbol": symbol,
+            "timeframe": interval,
+            "indicator": indicator,
+            "params": {"fast": 12, "slow": 26, "signal": 9},
+            "points": [{"time": 1, "macd": 1.0, "signal": 0.5, "histogram": 0.5}],
+        }
+
+    monkeypatch.setattr(
+        crypto,
+        "crypto_market_repo",
+        SimpleNamespace(
+            load_indicator=load_indicator,
+            materialize_macd=lambda symbol, interval, source_limit=None: calls.append(
+                ("materialize", symbol, interval, source_limit)
+            )
+            or 1,
+        ),
+    )
+    client = make_client()
+
+    response = client.get("/api/crypto/indicators?symbol=BTCUSDT&timeframe=1m&indicator=MACD&limit=50")
+
+    assert response.status_code == 200
+    assert response.json()["points"] == [{"time": 1, "macd": 1.0, "signal": 0.5, "histogram": 0.5}]
+    assert ("materialize", "BTCUSDT", "1m", 300) in calls
+
+
 def test_latest_prices_fall_back_to_latest_duckdb_closes(monkeypatch):
     from src.routes import crypto
 
@@ -134,18 +178,20 @@ def test_latest_prices_fall_back_to_latest_duckdb_closes(monkeypatch):
         lambda symbols: (_ for _ in ()).throw(RuntimeError("Binance unavailable")),
     )
     monkeypatch.setattr(
-        crypto.crypto_market_repo,
-        "load_candles",
-        lambda symbol, interval, *, limit: [
-            {
-                "time": 1,
-                "open": 1500.0,
-                "high": 1510.0,
-                "low": 1490.0,
-                "close": 1505.0 if symbol == "ETHUSDT" else 100.0,
-                "volume": 10.0,
-            }
-        ],
+        crypto,
+        "crypto_market_repo",
+        SimpleNamespace(
+            load_candles=lambda symbol, interval, *, limit: [
+                {
+                    "time": 1,
+                    "open": 1500.0,
+                    "high": 1510.0,
+                    "low": 1490.0,
+                    "close": 1505.0 if symbol == "ETHUSDT" else 100.0,
+                    "volume": 10.0,
+                }
+            ]
+        ),
     )
     client = make_client()
 

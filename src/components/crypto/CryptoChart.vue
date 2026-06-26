@@ -7,8 +7,58 @@
           {{ timeframe }} {{ statusText }}
         </p>
       </div>
+      <div class="relative">
+        <button
+          data-test="indicator-picker-button"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-white/[0.05]"
+          @click="indicatorMenuOpen = !indicatorMenuOpen"
+        >
+          Indicators
+        </button>
+        <div
+          v-if="indicatorMenuOpen"
+          class="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-800 dark:bg-gray-950"
+        >
+          <input
+            v-model="indicatorSearch"
+            data-test="indicator-search"
+            type="search"
+            class="mb-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+            placeholder="Search indicators"
+          />
+          <button
+            v-for="option in filteredIndicators"
+            :key="option.id"
+            :data-test="`indicator-option-${option.id}`"
+            type="button"
+            :disabled="!option.enabled"
+            class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/[0.05]"
+            :class="!option.enabled ? 'cursor-not-allowed opacity-50' : ''"
+            @click="selectIndicator(option.id)"
+          >
+            <span class="font-medium text-gray-800 dark:text-gray-100">{{ option.label }}</span>
+            <span class="text-xs text-gray-400">{{ option.description }}</span>
+          </button>
+        </div>
+      </div>
     </div>
     <div ref="chartEl" class="h-80 w-full"></div>
+    <div
+      v-if="selectedIndicator === 'MACD'"
+      data-test="indicator-panel-MACD"
+      class="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/70"
+    >
+      <div class="flex items-center justify-between gap-3 text-xs">
+        <span class="font-medium text-gray-600 dark:text-gray-300">MACD 12 26 close 9 EMA EMA</span>
+        <span v-if="macdLatest" class="flex gap-2 font-medium">
+          <span class="text-rose-500">{{ formatIndicatorValue(macdLatest.histogram) }}</span>
+          <span class="text-sky-500">{{ formatIndicatorValue(macdLatest.macd) }}</span>
+          <span class="text-amber-500">{{ formatIndicatorValue(macdLatest.signal) }}</span>
+        </span>
+      </div>
+      <div class="mt-3 h-24 rounded border border-dashed border-gray-200 bg-white dark:border-gray-800 dark:bg-black/20"></div>
+    </div>
   </section>
 </template>
 
@@ -16,9 +66,9 @@
 import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { fetchCryptoCandlesWithSource } from '@/services/cryptoMarketData'
+import { fetchCryptoCandlesWithSource, fetchCryptoIndicator } from '@/services/cryptoMarketData'
 import { onCryptoRealtimeCandle } from '@/services/cryptoRealtime'
-import type { Candle, CryptoSymbol, Timeframe } from '@/types/crypto'
+import type { Candle, CryptoIndicator, CryptoIndicatorResponse, CryptoSymbol, Timeframe } from '@/types/crypto'
 
 const props = defineProps<{
   symbol: CryptoSymbol
@@ -27,11 +77,38 @@ const props = defineProps<{
 
 const chartEl = ref<HTMLElement | null>(null)
 const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
+const indicatorMenuOpen = ref(false)
+const indicatorSearch = ref('')
+const selectedIndicator = ref<CryptoIndicator | null>(null)
+const macdData = ref<CryptoIndicatorResponse | null>(null)
 const statusText = computed(() => {
   if (status.value === 'loading') return 'Loading market candles'
   if (status.value === 'unavailable') return 'Market candles unavailable'
   return 'Binance Spot / warehouse candles'
 })
+type IndicatorOption = {
+  id: CryptoIndicator | 'RSI' | 'EMA' | 'SMA' | 'Volume'
+  label: string
+  description: string
+  enabled: boolean
+}
+
+const indicatorOptions: IndicatorOption[] = [
+  { id: 'MACD', label: 'MACD', description: 'DuckDB cache', enabled: true },
+  { id: 'RSI', label: 'RSI', description: 'soon', enabled: false },
+  { id: 'EMA', label: 'EMA', description: 'soon', enabled: false },
+  { id: 'SMA', label: 'SMA', description: 'soon', enabled: false },
+  { id: 'Volume', label: 'Volume', description: 'soon', enabled: false },
+]
+const filteredIndicators = computed(() => {
+  const query = indicatorSearch.value.trim().toLowerCase()
+  if (!query) return indicatorOptions
+  return indicatorOptions.filter((option) => option.label.toLowerCase().includes(query))
+})
+const indicatorTimeframe = computed<Exclude<Timeframe, '1D'>>(() => (
+  props.timeframe === '1D' ? '4h' : props.timeframe
+))
+const macdLatest = computed(() => macdData.value?.points.at(-1))
 let chart: IChartApi | null = null
 let series: ReturnType<IChartApi['addSeries']> | null = null
 let unsubscribeCandle: (() => void) | undefined
@@ -79,6 +156,22 @@ async function renderChart() {
   }
 }
 
+async function loadSelectedIndicator() {
+  if (selectedIndicator.value !== 'MACD') return
+  macdData.value = await fetchCryptoIndicator(props.symbol, indicatorTimeframe.value, 'MACD', 120)
+}
+
+function selectIndicator(indicator: IndicatorOption['id']) {
+  if (indicator !== 'MACD') return
+  selectedIndicator.value = indicator
+  indicatorMenuOpen.value = false
+  void loadSelectedIndicator()
+}
+
+function formatIndicatorValue(value: number): string {
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+}
+
 function applyRealtimeCandle(candle: Candle) {
   const next = candles.value.filter((item) => item.time !== candle.time)
   next.push(candle)
@@ -95,7 +188,10 @@ onMounted(() => {
   })
   void renderChart()
 })
-watch(() => [props.symbol, props.timeframe], () => void renderChart())
+watch(() => [props.symbol, props.timeframe], () => {
+  void renderChart()
+  void loadSelectedIndicator()
+})
 
 onBeforeUnmount(() => {
   unsubscribeCandle?.()

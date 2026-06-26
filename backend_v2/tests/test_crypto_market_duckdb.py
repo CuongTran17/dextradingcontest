@@ -117,3 +117,23 @@ def test_find_missing_ranges_groups_contiguous_minutes(tmp_path):
         (start + timedelta(minutes=1), start + timedelta(minutes=2)),
         (start + timedelta(minutes=4), start + timedelta(minutes=4)),
     ]
+
+
+def test_materialize_macd_stores_and_loads_indicator_series(tmp_path):
+    repo = CryptoMarketDuckDB(tmp_path / "crypto_market.duckdb")
+    start = datetime(2026, 6, 25, tzinfo=timezone.utc)
+    rows = [
+        _candle(start + timedelta(minutes=index), 100 + index * 0.5, volume=10 + index)
+        for index in range(60)
+    ]
+    repo.upsert_candles("BTCUSDT", "1m", rows)
+
+    written = repo.materialize_macd("BTCUSDT", "1m")
+    points = repo.load_indicator("BTCUSDT", "1m", "MACD", limit=5)
+
+    assert written == 60
+    assert points["indicator"] == "MACD"
+    assert points["params"] == {"fast": 12, "slow": 26, "signal": 9}
+    assert len(points["points"]) == 5
+    assert points["points"][0]["time"] < points["points"][-1]["time"]
+    assert {"macd", "signal", "histogram"} <= set(points["points"][-1])

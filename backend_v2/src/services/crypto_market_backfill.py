@@ -110,6 +110,7 @@ class CryptoMarketBackfillService:
                         break
 
             self.repo.materialize_intervals(normalized)
+            self.repo.materialize_indicators(normalized)
             self.repo.update_ingestion_state(
                 normalized,
                 "1m",

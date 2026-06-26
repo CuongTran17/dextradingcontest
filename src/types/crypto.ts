@@ -2,6 +2,7 @@ export type CryptoSymbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'XRPUSDT' | 'BNBU
 export type ContestStatus = 'practice' | 'upcoming' | 'active' | 'ended'
 export type OrderSide = 'buy' | 'sell'
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
+export type CryptoIndicator = 'MACD'
 
 export interface Candle {
   time: number
@@ -28,6 +29,25 @@ export interface CryptoOrderBook {
   spread: number
   mid_price: number
   source: MarketDataSource
+}
+
+export interface MacdPoint {
+  time: number
+  macd: number
+  signal: number
+  histogram: number
+}
+
+export interface CryptoIndicatorResponse {
+  symbol: CryptoSymbol
+  timeframe: Exclude<Timeframe, '1D'>
+  indicator: CryptoIndicator
+  params: {
+    fast: number
+    slow: number
+    signal: number
+  }
+  points: MacdPoint[]
 }
 
 export interface CryptoAsset {
