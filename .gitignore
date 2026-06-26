@@ -52,6 +52,7 @@ test_*.py
 *_test.py
 !backend_v2/tests/test_crypto_app_surface.py
 !backend_v2/tests/test_admin_users.py
+!backend_v2/tests/test_binance_realtime.py
 
 # Generated data files (run ETL pipeline to regenerate)
 market_data.csv

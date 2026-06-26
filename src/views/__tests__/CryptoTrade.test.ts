@@ -6,6 +6,11 @@ import {
   placeCryptoMarketOrder,
 } from '@/services/cryptoTradingApi'
 import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
+import {
+  connectCryptoRealtime,
+  cryptoRealtimeState,
+  subscribeCryptoRealtimeSymbol,
+} from '@/services/cryptoRealtime'
 import CryptoTrade from '@/views/CryptoTrade.vue'
 
 vi.mock('vue-router', () => ({
@@ -45,6 +50,17 @@ vi.mock('@/services/cryptoMarketData', () => ({
   })[symbol]),
 }))
 
+vi.mock('@/services/cryptoRealtime', () => ({
+  connectCryptoRealtime: vi.fn(),
+  subscribeCryptoRealtimeSymbol: vi.fn(),
+  cryptoRealtimeState: {
+    prices: { BTCUSDT: 66000 },
+    status: 'connected',
+    selectedSymbol: 'BTCUSDT',
+    lastMessageAt: 0,
+  },
+}))
+
 vi.mock('@/services/cryptoTradingApi', () => ({
   getCryptoAccount: vi.fn(),
   joinCryptoContest: vi.fn(),
@@ -66,8 +82,11 @@ const accountFixture = {
 
 describe('CryptoTrade', () => {
   beforeEach(() => {
+    vi.spyOn(window, 'setInterval')
     vi.mocked(getCryptoAccount).mockReset()
     vi.mocked(placeCryptoMarketOrder).mockReset()
+    vi.mocked(connectCryptoRealtime).mockReset()
+    vi.mocked(subscribeCryptoRealtimeSymbol).mockReset()
     vi.mocked(fetchLatestCryptoPrices).mockResolvedValue({
       BTCUSDT: 65000,
       ETHUSDT: 3000,
@@ -118,5 +137,16 @@ describe('CryptoTrade', () => {
       quantity: 0.01,
     })
     expect(getCryptoAccount).toHaveBeenCalledTimes(2)
+  })
+
+  it('subscribes to realtime prices without starting a price polling timer', async () => {
+    mount(CryptoTrade)
+    await flushPromises()
+
+    expect(connectCryptoRealtime).toHaveBeenCalledTimes(1)
+    expect(subscribeCryptoRealtimeSymbol).toHaveBeenCalledWith('BTCUSDT')
+    expect(fetchLatestCryptoPrices).toHaveBeenCalledTimes(1)
+    expect(window.setInterval).not.toHaveBeenCalled()
+    expect(cryptoRealtimeState.prices.BTCUSDT).toBe(66000)
   })
 })

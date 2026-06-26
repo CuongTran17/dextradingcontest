@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from sqlalchemy import text
 
 from src.database.db import AsyncSessionLocal
@@ -64,8 +64,15 @@ async def liveness() -> dict[str, Any]:
     }
 
 
+def _realtime_status(request: Request) -> dict[str, Any]:
+    service = getattr(request.app.state, "crypto_realtime", None)
+    if service is None:
+        return {"status": "unavailable"}
+    return service.status()
+
+
 @router.get("/ready")
-async def readiness(response: Response) -> dict[str, Any]:
+async def readiness(request: Request, response: Response) -> dict[str, Any]:
     checks = {
         "database": await _check_database(),
         "migrations": await _check_migrations(),
@@ -78,9 +85,10 @@ async def readiness(response: Response) -> dict[str, Any]:
         "status": status,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
+        "binance_realtime": _realtime_status(request),
     }
 
 
 @router.get("")
-async def health(response: Response) -> dict[str, Any]:
-    return await readiness(response)
+async def health(request: Request, response: Response) -> dict[str, Any]:
+    return await readiness(request, response)

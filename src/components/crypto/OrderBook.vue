@@ -57,6 +57,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { fetchCryptoOrderBook } from '@/services/cryptoMarketData'
+import { onCryptoRealtimeOrderBook } from '@/services/cryptoRealtime'
 import type { CryptoOrderBook, CryptoSymbol } from '@/types/crypto'
 
 const props = withDefaults(
@@ -76,7 +77,7 @@ const statusText = computed(() => {
 })
 const visibleBids = computed(() => book.value?.bids.slice(0, 12) ?? [])
 const visibleAsks = computed(() => book.value?.asks.slice(0, 12) ?? [])
-let refreshTimer: number | undefined
+let unsubscribeOrderBook: (() => void) | undefined
 
 async function refreshOrderBook() {
   status.value = 'loading'
@@ -103,8 +104,13 @@ function formatCompact(value: number): string {
 }
 
 onMounted(() => {
+  unsubscribeOrderBook = onCryptoRealtimeOrderBook((event) => {
+    if (event.symbol === props.symbol) {
+      book.value = event.orderbook
+      status.value = 'ready'
+    }
+  })
   void refreshOrderBook()
-  refreshTimer = window.setInterval(() => void refreshOrderBook(), 3000)
 })
 
 watch(
@@ -116,6 +122,6 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  if (refreshTimer) window.clearInterval(refreshTimer)
+  unsubscribeOrderBook?.()
 })
 </script>

@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import CryptoChart from '@/components/crypto/CryptoChart.vue'
@@ -58,6 +58,11 @@ import { CRYPTO_ASSETS, DEFAULT_CRYPTO_SYMBOL } from '@/constants/cryptoAssets'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { ApiError } from '@/services/httpClient'
 import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
+import {
+  connectCryptoRealtime,
+  cryptoRealtimeState,
+  subscribeCryptoRealtimeSymbol,
+} from '@/services/cryptoRealtime'
 import {
   getCryptoAccount,
   joinCryptoContest,
@@ -74,14 +79,13 @@ const accountLoading = ref(true)
 const priceLoading = ref(true)
 const orderSubmitting = ref(false)
 const account = ref<TradingAccount | null>(null)
-const livePrices = ref<Record<CryptoSymbol, number>>({
+const fallbackPrices = ref<Record<CryptoSymbol, number>>({
   BTCUSDT: 0,
   ETHUSDT: 0,
   SOLUSDT: 0,
   XRPUSDT: 0,
   BNBUSDT: 0,
 })
-let priceTimer: number | undefined
 
 const currentSymbol = computed<CryptoSymbol>(() => {
   const routeSymbol = typeof route.params.symbol === 'string' ? route.params.symbol : DEFAULT_CRYPTO_SYMBOL
@@ -90,7 +94,9 @@ const currentSymbol = computed<CryptoSymbol>(() => {
     : DEFAULT_CRYPTO_SYMBOL
 })
 
-const latestPrice = computed(() => livePrices.value[currentSymbol.value])
+const latestPrice = computed(
+  () => cryptoRealtimeState.prices[currentSymbol.value] ?? fallbackPrices.value[currentSymbol.value],
+)
 const metrics = computed(() => {
   const current = account.value
   const equity = current?.equity ?? 0
@@ -154,27 +160,25 @@ async function refreshLatestPrices() {
     'XRPUSDT',
     'BNBUSDT',
   ])
-  livePrices.value = {
-    BTCUSDT: prices.BTCUSDT ?? livePrices.value.BTCUSDT,
-    ETHUSDT: prices.ETHUSDT ?? livePrices.value.ETHUSDT,
-    SOLUSDT: prices.SOLUSDT ?? livePrices.value.SOLUSDT,
-    XRPUSDT: prices.XRPUSDT ?? livePrices.value.XRPUSDT,
-    BNBUSDT: prices.BNBUSDT ?? livePrices.value.BNBUSDT,
+  fallbackPrices.value = {
+    BTCUSDT: prices.BTCUSDT ?? fallbackPrices.value.BTCUSDT,
+    ETHUSDT: prices.ETHUSDT ?? fallbackPrices.value.ETHUSDT,
+    SOLUSDT: prices.SOLUSDT ?? fallbackPrices.value.SOLUSDT,
+    XRPUSDT: prices.XRPUSDT ?? fallbackPrices.value.XRPUSDT,
+    BNBUSDT: prices.BNBUSDT ?? fallbackPrices.value.BNBUSDT,
   }
   priceLoading.value = false
 }
 
 onMounted(() => {
   void loadAccount()
+  connectCryptoRealtime()
+  subscribeCryptoRealtimeSymbol(currentSymbol.value)
   void refreshLatestPrices()
-  priceTimer = window.setInterval(() => void refreshLatestPrices(), 5000)
 })
 
 watch(currentSymbol, () => {
+  subscribeCryptoRealtimeSymbol(currentSymbol.value)
   void refreshLatestPrices()
-})
-
-onBeforeUnmount(() => {
-  if (priceTimer) window.clearInterval(priceTimer)
 })
 </script>

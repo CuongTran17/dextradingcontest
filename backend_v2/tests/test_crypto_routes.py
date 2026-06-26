@@ -10,6 +10,48 @@ def make_client():
     return TestClient(app)
 
 
+class FakeRealtime:
+    def __init__(self):
+        self.cache = self
+
+    def get_prices(self):
+        return {"ETHUSDT": 1666.25}
+
+    def get_orderbook(self, symbol):
+        if symbol != "ETHUSDT":
+            return None
+        return {
+            "symbol": "ETHUSDT",
+            "last_update_id": 456,
+            "bids": [{"price": 1666.0, "quantity": 1.0, "total": 1666.0}],
+            "asks": [{"price": 1666.5, "quantity": 1.0, "total": 1666.5}],
+            "spread": 0.5,
+            "mid_price": 1666.25,
+            "source": "binance-websocket",
+        }
+
+    def snapshot(self):
+        return {
+            "prices": {"ETHUSDT": 1666.25},
+            "connection": {"status": "connected", "updated_at": 1710000000000},
+        }
+
+    async def handle_client(self, websocket):
+        await websocket.accept()
+        await websocket.send_json({"type": "snapshot", **self.snapshot()})
+        message = await websocket.receive_json()
+        if message != {"type": "subscribe", "symbol": "ETHUSDT"}:
+            await websocket.send_json({"type": "error", "message": "Unsupported crypto symbol"})
+        await websocket.close()
+
+
+def make_client_with_realtime():
+    app = FastAPI()
+    app.state.crypto_realtime = FakeRealtime()
+    app.include_router(router)
+    return TestClient(app)
+
+
 def test_assets_include_all_supported_spot_symbols():
     client = make_client()
 
@@ -111,6 +153,50 @@ def test_latest_prices_fall_back_to_latest_duckdb_closes(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["ETHUSDT"] == 1505.0
+
+
+def test_latest_prices_prefer_realtime_cache(monkeypatch):
+    from src.routes import crypto
+
+    monkeypatch.setattr(
+        crypto,
+        "get_binance_latest_prices",
+        lambda symbols: (_ for _ in ()).throw(AssertionError("Binance should not be called")),
+    )
+    client = make_client_with_realtime()
+
+    response = client.get("/api/crypto/prices/latest")
+
+    assert response.status_code == 200
+    assert response.json() == {"ETHUSDT": 1666.25}
+
+
+def test_orderbook_prefers_realtime_cache(monkeypatch):
+    from src.routes import crypto
+
+    monkeypatch.setattr(
+        crypto,
+        "get_binance_order_book",
+        lambda symbol, limit: (_ for _ in ()).throw(AssertionError("Binance should not be called")),
+    )
+    client = make_client_with_realtime()
+
+    response = client.get("/api/crypto/orderbook?symbol=ETHUSDT&limit=100")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "binance-websocket"
+
+
+def test_crypto_websocket_returns_error_for_invalid_subscription_symbol():
+    client = make_client_with_realtime()
+
+    with client.websocket_connect("/api/crypto/ws") as websocket:
+        snapshot = websocket.receive_json()
+        websocket.send_json({"type": "subscribe", "symbol": "DOGEUSDT"})
+        error = websocket.receive_json()
+
+    assert snapshot["type"] == "snapshot"
+    assert error == {"type": "error", "message": "Unsupported crypto symbol"}
 
 
 def test_orderbook_returns_503_instead_of_mock_depth(monkeypatch):

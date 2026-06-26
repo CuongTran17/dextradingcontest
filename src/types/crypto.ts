@@ -12,7 +12,7 @@ export interface Candle {
   volume: number
 }
 
-export type MarketDataSource = 'binance' | 'mock'
+export type MarketDataSource = 'binance' | 'binance-websocket' | 'mock'
 
 export interface OrderBookLevel {
   price: number

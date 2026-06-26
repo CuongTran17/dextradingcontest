@@ -17,6 +17,7 @@ import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-char
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { fetchCryptoCandlesWithSource } from '@/services/cryptoMarketData'
+import { onCryptoRealtimeCandle } from '@/services/cryptoRealtime'
 import type { Candle, CryptoSymbol, Timeframe } from '@/types/crypto'
 
 const props = defineProps<{
@@ -33,8 +34,11 @@ const statusText = computed(() => {
 })
 let chart: IChartApi | null = null
 let series: ReturnType<IChartApi['addSeries']> | null = null
+let unsubscribeCandle: (() => void) | undefined
+const candles = ref<Candle[]>([])
 
 function setChartData(candles: Candle[]) {
+  candles.sort((left, right) => left.time - right.time)
   series?.setData(
     candles.map((candle) => ({
       ...candle,
@@ -66,7 +70,8 @@ async function renderChart() {
   status.value = 'loading'
   try {
     const result = await fetchCryptoCandlesWithSource(props.symbol, props.timeframe, 80)
-    setChartData(result.candles)
+    candles.value = result.candles
+    setChartData(candles.value)
     status.value = 'ready'
   } catch {
     series?.setData([])
@@ -74,10 +79,26 @@ async function renderChart() {
   }
 }
 
-onMounted(() => void renderChart())
+function applyRealtimeCandle(candle: Candle) {
+  const next = candles.value.filter((item) => item.time !== candle.time)
+  next.push(candle)
+  candles.value = next.slice(-80)
+  series?.update({ ...candle, time: candle.time as never })
+}
+
+onMounted(() => {
+  unsubscribeCandle = onCryptoRealtimeCandle((event) => {
+    if (event.symbol === props.symbol && props.timeframe === '1m') {
+      applyRealtimeCandle(event.candle)
+      status.value = 'ready'
+    }
+  })
+  void renderChart()
+})
 watch(() => [props.symbol, props.timeframe], () => void renderChart())
 
 onBeforeUnmount(() => {
+  unsubscribeCandle?.()
   chart?.remove()
   chart = null
   series = null
