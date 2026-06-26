@@ -7,16 +7,27 @@ import {
   fetchCryptoIndicator,
 } from '@/services/cryptoMarketData'
 
+const chartMocks = vi.hoisted(() => {
+  const series = {
+    setData: vi.fn(),
+    update: vi.fn(),
+  }
+  return {
+    series,
+    addSeries: vi.fn(() => series),
+    createChart: vi.fn(() => ({
+      addSeries: vi.fn(() => series),
+      timeScale: vi.fn(() => ({ fitContent: vi.fn() })),
+      remove: vi.fn(),
+    })),
+  }
+})
+
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: 'CandlestickSeries',
-  createChart: vi.fn(() => ({
-    addSeries: vi.fn(() => ({
-      setData: vi.fn(),
-      update: vi.fn(),
-    })),
-    timeScale: vi.fn(() => ({ fitContent: vi.fn() })),
-    remove: vi.fn(),
-  })),
+  HistogramSeries: 'HistogramSeries',
+  LineSeries: 'LineSeries',
+  createChart: chartMocks.createChart,
 }))
 
 vi.mock('@/services/cryptoRealtime', () => ({
@@ -30,6 +41,9 @@ vi.mock('@/services/cryptoMarketData', () => ({
 
 describe('CryptoChart', () => {
   beforeEach(() => {
+    chartMocks.createChart.mockClear()
+    chartMocks.series.setData.mockClear()
+    chartMocks.series.update.mockClear()
     vi.mocked(fetchCryptoCandlesWithSource).mockResolvedValue({
       source: 'binance',
       candles: [{ time: 1, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 }],
@@ -55,6 +69,12 @@ describe('CryptoChart', () => {
     await flushPromises()
 
     expect(fetchCryptoIndicator).toHaveBeenCalledWith('BTCUSDT', '1m', 'MACD', 120)
+    expect(chartMocks.createChart).toHaveBeenCalledTimes(2)
+    expect(chartMocks.series.setData).toHaveBeenCalledWith([
+      { time: 1, value: 0.2, color: '#10b981' },
+    ])
+    expect(chartMocks.series.setData).toHaveBeenCalledWith([{ time: 1, value: 1.2 }])
+    expect(chartMocks.series.setData).toHaveBeenCalledWith([{ time: 1, value: 1.0 }])
     expect(wrapper.get('[data-test="indicator-panel-MACD"]').text()).toContain('MACD 12 26 close 9 EMA EMA')
     expect(wrapper.text()).toContain('1.20')
     expect(wrapper.text()).toContain('0.20')

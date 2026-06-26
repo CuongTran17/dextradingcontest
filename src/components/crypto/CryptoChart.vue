@@ -57,13 +57,19 @@
           <span class="text-amber-500">{{ formatIndicatorValue(macdLatest.signal) }}</span>
         </span>
       </div>
-      <div class="mt-3 h-24 rounded border border-dashed border-gray-200 bg-white dark:border-gray-800 dark:bg-black/20"></div>
+      <div ref="macdChartEl" class="mt-3 h-28 w-full"></div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts'
+import {
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  createChart,
+  type IChartApi,
+} from 'lightweight-charts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { fetchCryptoCandlesWithSource, fetchCryptoIndicator } from '@/services/cryptoMarketData'
@@ -76,6 +82,7 @@ const props = defineProps<{
 }>()
 
 const chartEl = ref<HTMLElement | null>(null)
+const macdChartEl = ref<HTMLElement | null>(null)
 const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
 const indicatorMenuOpen = ref(false)
 const indicatorSearch = ref('')
@@ -111,6 +118,10 @@ const indicatorTimeframe = computed<Exclude<Timeframe, '1D'>>(() => (
 const macdLatest = computed(() => macdData.value?.points.at(-1))
 let chart: IChartApi | null = null
 let series: ReturnType<IChartApi['addSeries']> | null = null
+let macdChart: IChartApi | null = null
+let macdHistogramSeries: ReturnType<IChartApi['addSeries']> | null = null
+let macdLineSeries: ReturnType<IChartApi['addSeries']> | null = null
+let macdSignalSeries: ReturnType<IChartApi['addSeries']> | null = null
 let unsubscribeCandle: (() => void) | undefined
 const candles = ref<Candle[]>([])
 
@@ -159,6 +170,7 @@ async function renderChart() {
 async function loadSelectedIndicator() {
   if (selectedIndicator.value !== 'MACD') return
   macdData.value = await fetchCryptoIndicator(props.symbol, indicatorTimeframe.value, 'MACD', 120)
+  renderMacdChart()
 }
 
 function selectIndicator(indicator: IndicatorOption['id']) {
@@ -170,6 +182,47 @@ function selectIndicator(indicator: IndicatorOption['id']) {
 
 function formatIndicatorValue(value: number): string {
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+}
+
+function ensureMacdChart() {
+  if (!macdChartEl.value || macdChart) return
+
+  macdChart = createChart(macdChartEl.value, {
+    height: 112,
+    layout: { background: { color: 'transparent' }, textColor: '#6b7280' },
+    grid: { vertLines: { color: '#e5e7eb' }, horzLines: { color: '#e5e7eb' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false },
+  })
+  macdHistogramSeries = macdChart.addSeries(HistogramSeries, {
+    priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+  })
+  macdLineSeries = macdChart.addSeries(LineSeries, {
+    color: '#0ea5e9',
+    lineWidth: 1,
+    priceLineVisible: false,
+  })
+  macdSignalSeries = macdChart.addSeries(LineSeries, {
+    color: '#f59e0b',
+    lineWidth: 1,
+    priceLineVisible: false,
+  })
+}
+
+function renderMacdChart() {
+  if (selectedIndicator.value !== 'MACD' || !macdData.value) return
+  ensureMacdChart()
+  const points = macdData.value.points
+  macdHistogramSeries?.setData(
+    points.map((point) => ({
+      time: point.time as never,
+      value: point.histogram,
+      color: point.histogram >= 0 ? '#10b981' : '#f43f5e',
+    })),
+  )
+  macdLineSeries?.setData(points.map((point) => ({ time: point.time as never, value: point.macd })))
+  macdSignalSeries?.setData(points.map((point) => ({ time: point.time as never, value: point.signal })))
+  macdChart?.timeScale().fitContent()
 }
 
 function applyRealtimeCandle(candle: Candle) {
@@ -196,7 +249,12 @@ watch(() => [props.symbol, props.timeframe], () => {
 onBeforeUnmount(() => {
   unsubscribeCandle?.()
   chart?.remove()
+  macdChart?.remove()
   chart = null
   series = null
+  macdChart = null
+  macdHistogramSeries = null
+  macdLineSeries = null
+  macdSignalSeries = null
 })
 </script>
