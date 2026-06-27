@@ -12,6 +12,7 @@ from src.services.crypto_contests import (
     ContestNotFoundError,
     ContestValidationError,
     CryptoContestService,
+    ParticipantNotFoundError,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -168,6 +169,36 @@ def admin_set_crypto_contest_status(
     try:
         return service.set_contest_status(contest_id, status)
     except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ContestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/crypto/contests/{contest_id}/participants")
+def admin_list_crypto_contest_participants(
+    contest_id: str,
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    try:
+        return service.list_participants(contest_id)
+    except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/crypto/contests/{contest_id}/participants/{user_id}/status")
+def admin_set_crypto_contest_participant_status(
+    contest_id: str,
+    user_id: int,
+    status: str = Query(...),
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    try:
+        return service.set_participant_status(contest_id, user_id, status)
+    except (ContestNotFoundError, ParticipantNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ContestValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

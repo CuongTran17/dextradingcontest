@@ -15,6 +15,10 @@ class ContestValidationError(Exception):
     pass
 
 
+class ParticipantNotFoundError(Exception):
+    pass
+
+
 def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -178,6 +182,32 @@ class CryptoContestService:
             row["rank"] = index
         return rows
 
+    def list_participants(self, slug: str) -> list[dict]:
+        contest = self.repository.get_contest_by_slug(slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{slug}' not found")
+
+        participants = self.repository.list_contest_participants(slug)
+        return self._participant_rows(contest, participants)
+
+    def set_participant_status(self, slug: str, user_id: int, status: str) -> dict:
+        if status not in {"active", "locked", "disqualified"}:
+            raise ContestValidationError("Invalid participant status")
+
+        contest = self.repository.get_contest_by_slug(slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{slug}' not found")
+
+        participant = self.repository.get_contest_participant_by_user(slug, user_id)
+        if participant is None:
+            raise ParticipantNotFoundError("Contest participant not found")
+
+        participant.status = status
+        if participant.account is not None:
+            participant.account.status = "active" if status == "active" else "frozen"
+        self.repository.commit()
+        return self._participant_rows(contest, [participant])[0]
+
     def _map_contest(self, contest: Contest) -> dict:
         enabled_assets = [
             item.asset
@@ -196,6 +226,61 @@ class CryptoContestService:
             "starts_at": _iso(contest.starts_at),
             "ends_at": _iso(contest.ends_at),
             "participant_count": len(contest.participants),
+        }
+
+    def _participant_rows(self, contest: Contest, participants: list) -> list[dict]:
+        symbols = [
+            item.asset.symbol
+            for item in contest.assets
+            if item.is_enabled and item.asset.is_active
+        ]
+        prices = self.price_provider(symbols)
+        user_names = self._user_display_names([participant.user_id for participant in participants])
+        rows = [
+            self._map_participant_row(contest, participant, prices, user_names)
+            for participant in participants
+            if participant.account is not None
+        ]
+        return sorted(rows, key=lambda row: row["equity"], reverse=True)
+
+    def _map_participant_row(
+        self,
+        contest: Contest,
+        participant,
+        prices: dict[str, float],
+        user_names: dict[int, str],
+    ) -> dict:
+        account = participant.account
+        cash = sum(
+            float(balance.available)
+            for balance in account.balances
+            if balance.asset == contest.quote_asset
+        )
+        position_value = sum(
+            float(position.quantity) * float(prices.get(position.asset.symbol, 0))
+            for position in account.positions
+        )
+        equity = cash + position_value
+        initial = float(account.initial_equity)
+        pnl = equity - initial
+        filled_orders = [order for order in account.orders if order.status == "filled"]
+        volume = sum(float(order.executed_notional) for order in filled_orders)
+        last_order = max(account.orders, key=lambda order: order.submitted_at, default=None)
+        return {
+            "user_id": participant.user_id,
+            "user": user_names.get(participant.user_id, f"user-{participant.user_id}"),
+            "status": participant.status,
+            "account_status": account.status,
+            "equity": round(equity, 2),
+            "pnl": round(pnl, 2),
+            "roi": round((pnl / initial) * 100, 4) if initial else 0,
+            "volume": round(volume, 2),
+            "trade_count": len(filled_orders),
+            "last_trade": (
+                f"{last_order.asset.symbol} {last_order.side}"
+                if last_order is not None
+                else None
+            ),
         }
 
     def _user_display_names(self, user_ids: list[int]) -> dict[int, str]:

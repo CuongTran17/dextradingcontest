@@ -86,6 +86,22 @@ class CryptoTradingRepository:
             .all()
         )
 
+    def get_contest_participant_by_user(
+        self,
+        contest_slug: str,
+        user_id: int,
+    ) -> ContestParticipant | None:
+        return (
+            self.db.query(ContestParticipant)
+            .join(Contest)
+            .options(selectinload(ContestParticipant.account))
+            .filter(
+                Contest.slug == contest_slug,
+                ContestParticipant.user_id == user_id,
+            )
+            .first()
+        )
+
     def create_participant(
         self,
         contest_id: int,
