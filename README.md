@@ -17,6 +17,7 @@ features have been removed from the runtime. Their frontend code is retained und
 - MySQL-backed contest participants, accounts, balances, positions, orders, and fills.
 - MySQL-backed public contest list/detail pages and live-equity leaderboards.
 - Admin contest creation and status management without editing user results.
+- Admin participant moderation for active, locked, and disqualified contest accounts.
 - One isolated virtual account per user and contest.
 - Idempotent market orders executed against Binance order-book depth.
 - Dedicated DuckDB warehouse with a rolling year of `1m` Spot candles.
@@ -172,6 +173,8 @@ PUT  /api/admin/crypto/contests/{contest_id}/status
 - Public contest APIs live under `/api/crypto/contests`.
 - Admin contest APIs live under `/api/admin/crypto/contests` and require an admin JWT.
 - Admins can create contests and change contest status, but cannot edit user trading results.
+- Admins can list contest participants and set participant status to active, locked, or disqualified.
+- Locked or disqualified participants have their trading account frozen for that contest.
 
 ## Verification
 
