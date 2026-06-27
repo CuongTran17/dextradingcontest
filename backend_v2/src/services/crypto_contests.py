@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
 from src.database.crypto_models import Contest, ContestAsset
+from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import ContestCreate, ContestUpdate
+from src.services.binance_market_data import get_latest_prices
 
 
 class ContestNotFoundError(Exception):
@@ -32,8 +34,9 @@ def _public_status(contest: Contest) -> str:
 
 
 class CryptoContestService:
-    def __init__(self, repository: CryptoTradingRepository):
+    def __init__(self, repository: CryptoTradingRepository, price_provider=None):
         self.repository = repository
+        self.price_provider = price_provider or get_latest_prices
 
     def list_contests(self) -> list[dict]:
         return [self._map_contest(contest) for contest in self.repository.list_contests()]
@@ -117,6 +120,64 @@ class CryptoContestService:
         self.repository.commit()
         return self._map_contest(contest)
 
+    def get_leaderboard(self, slug: str) -> list[dict]:
+        contest = self.repository.get_contest_by_slug(slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{slug}' not found")
+
+        participants = self.repository.list_contest_participants(slug)
+        symbols = [
+            item.asset.symbol
+            for item in contest.assets
+            if item.is_enabled and item.asset.is_active
+        ]
+        prices = self.price_provider(symbols)
+        user_names = self._user_display_names([participant.user_id for participant in participants])
+        rows = []
+
+        for participant in participants:
+            account = participant.account
+            if account is None:
+                continue
+
+            cash = sum(
+                float(balance.available)
+                for balance in account.balances
+                if balance.asset == contest.quote_asset
+            )
+            position_value = sum(
+                float(position.quantity) * float(prices.get(position.asset.symbol, 0))
+                for position in account.positions
+            )
+            equity = cash + position_value
+            initial = float(account.initial_equity)
+            pnl = equity - initial
+            filled_orders = [order for order in account.orders if order.status == "filled"]
+            volume = sum(float(order.executed_notional) for order in filled_orders)
+            last_order = max(account.orders, key=lambda order: order.submitted_at, default=None)
+
+            rows.append(
+                {
+                    "rank": 0,
+                    "user": user_names.get(participant.user_id, f"user-{participant.user_id}"),
+                    "equity": round(equity, 2),
+                    "pnl": round(pnl, 2),
+                    "roi": round((pnl / initial) * 100, 4) if initial else 0,
+                    "volume": round(volume, 2),
+                    "trade_count": len(filled_orders),
+                    "last_trade": (
+                        f"{last_order.asset.symbol} {last_order.side}"
+                        if last_order is not None
+                        else None
+                    ),
+                }
+            )
+
+        rows.sort(key=lambda row: row["equity"], reverse=True)
+        for index, row in enumerate(rows, start=1):
+            row["rank"] = index
+        return rows
+
     def _map_contest(self, contest: Contest) -> dict:
         enabled_assets = [
             item.asset
@@ -135,4 +196,13 @@ class CryptoContestService:
             "starts_at": _iso(contest.starts_at),
             "ends_at": _iso(contest.ends_at),
             "participant_count": len(contest.participants),
+        }
+
+    def _user_display_names(self, user_ids: list[int]) -> dict[int, str]:
+        if not user_ids:
+            return {}
+        users = self.repository.db.query(User).filter(User.id.in_(user_ids)).all()
+        return {
+            user.id: user.fullname or user.email or f"user-{user.id}"
+            for user in users
         }

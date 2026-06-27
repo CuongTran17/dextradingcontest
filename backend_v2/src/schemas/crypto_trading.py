@@ -68,6 +68,17 @@ class ContestUpdate(BaseModel):
     symbols: list[CryptoSymbol] | None = Field(default=None, min_length=1, max_length=5)
 
 
+class LeaderboardRowResponse(BaseModel):
+    rank: int
+    user: str
+    equity: float
+    pnl: float
+    roi: float
+    volume: float
+    trade_count: int
+    last_trade: str | None
+
+
 class PositionResponse(BaseModel):
     symbol: str
     quantity: float

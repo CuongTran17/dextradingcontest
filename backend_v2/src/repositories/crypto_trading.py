@@ -67,6 +67,25 @@ class CryptoTradingRepository:
             .first()
         )
 
+    def list_contest_participants(self, contest_slug: str) -> list[ContestParticipant]:
+        return (
+            self.db.query(ContestParticipant)
+            .join(Contest)
+            .options(
+                selectinload(ContestParticipant.account).selectinload(
+                    TradingAccount.balances
+                ),
+                selectinload(ContestParticipant.account)
+                .selectinload(TradingAccount.positions)
+                .selectinload(Position.asset),
+                selectinload(ContestParticipant.account)
+                .selectinload(TradingAccount.orders)
+                .selectinload(TradingOrder.asset),
+            )
+            .filter(Contest.slug == contest_slug)
+            .all()
+        )
+
     def create_participant(
         self,
         contest_id: int,

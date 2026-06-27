@@ -76,6 +76,17 @@ def get_contest(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/contests/{contest_id}/leaderboard")
+def get_contest_leaderboard(
+    contest_id: str,
+    service: CryptoContestService = Depends(get_contest_service),
+):
+    try:
+        return service.get_leaderboard(contest_id)
+    except PublicContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post(
     "/contests/{contest_id}/join",
     response_model=TradingAccountResponse,

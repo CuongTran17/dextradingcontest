@@ -82,6 +82,21 @@ class FakeContestService:
         assert slug == "practice-arena"
         return CONTEST
 
+    def get_leaderboard(self, slug):
+        assert slug == "practice-arena"
+        return [
+            {
+                "rank": 1,
+                "user": "Student B",
+                "equity": 11000.0,
+                "pnl": 1000.0,
+                "roi": 10.0,
+                "volume": 2500.0,
+                "trade_count": 1,
+                "last_trade": "BTCUSDT buy",
+            }
+        ]
+
 
 def _make_app(authenticated=False):
     app = FastAPI()
@@ -124,6 +139,17 @@ def test_get_public_contest_detail_does_not_require_auth():
 
     assert response.status_code == 200
     assert response.json()["id"] == "practice-arena"
+
+
+def test_get_public_contest_leaderboard_does_not_require_auth():
+    app, _order_service = _make_app()
+    app.dependency_overrides[get_contest_service] = lambda: FakeContestService()
+    client = TestClient(app)
+
+    response = client.get("/api/crypto/contests/practice-arena/leaderboard")
+
+    assert response.status_code == 200
+    assert response.json()[0]["equity"] == 11000.0
 
 
 def test_join_contest_returns_persistent_account():
