@@ -60,19 +60,19 @@ const router = createRouter({
       path: '/signin',
       name: 'Signin',
       component: () => import('../views/Auth/Signin.vue'),
-      meta: { title: 'Sign In' },
+      meta: { title: 'Sign In', layout: 'fullscreen' },
     },
     {
       path: '/signup',
       name: 'Signup',
       component: () => import('../views/Auth/Signup.vue'),
-      meta: { title: 'Sign Up' },
+      meta: { title: 'Sign Up', layout: 'fullscreen' },
     },
     {
       path: '/welcome',
       name: 'GuestGate',
       component: () => import('../views/Auth/GuestGate.vue'),
-      meta: { title: 'Join Crypto Contest' },
+      meta: { title: 'Join Crypto Contest', layout: 'fullscreen' },
     },
     {
       path: '/profile',
