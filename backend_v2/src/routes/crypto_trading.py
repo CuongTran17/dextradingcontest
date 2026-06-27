@@ -16,6 +16,10 @@ from src.services.crypto_accounts import (
     ContestNotFoundError,
     CryptoAccountService,
 )
+from src.services.crypto_contests import (
+    ContestNotFoundError as PublicContestNotFoundError,
+)
+from src.services.crypto_contests import CryptoContestService
 from src.services.crypto_execution import (
     AccountUnavailableError,
     AssetUnavailableError,
@@ -39,6 +43,12 @@ def get_account_service(
     return CryptoAccountService(CryptoTradingRepository(db))
 
 
+def get_contest_service(
+    db: Session = Depends(get_db),
+) -> CryptoContestService:
+    return CryptoContestService(CryptoTradingRepository(db))
+
+
 def get_order_service(
     db: Session = Depends(get_db),
 ) -> CryptoOrderService:
@@ -46,6 +56,24 @@ def get_order_service(
         CryptoTradingRepository(db),
         BinanceRestLiquidityProvider(),
     )
+
+
+@router.get("/contests")
+def list_contests(
+    service: CryptoContestService = Depends(get_contest_service),
+):
+    return service.list_contests()
+
+
+@router.get("/contests/{contest_id}")
+def get_contest(
+    contest_id: str,
+    service: CryptoContestService = Depends(get_contest_service),
+):
+    try:
+        return service.get_contest(contest_id)
+    except PublicContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(

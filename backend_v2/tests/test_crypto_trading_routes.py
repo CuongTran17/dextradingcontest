@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from src.api.auth import require_auth
 from src.routes.crypto_trading import (
     get_account_service,
+    get_contest_service,
     get_order_service,
     router,
 )
@@ -37,6 +38,20 @@ ORDER = {
     "created_at": "2026-06-25T00:00:00+00:00",
 }
 
+CONTEST = {
+    "id": "practice-arena",
+    "title": "Practice Arena",
+    "status": "practice",
+    "raw_status": "active",
+    "mode": "practice",
+    "initial_capital": 10000.0,
+    "quote_asset": "USDT_TEST",
+    "symbols": ["BTCUSDT", "ETHUSDT"],
+    "starts_at": "2026-06-01T00:00:00+00:00",
+    "ends_at": "2026-07-01T00:00:00+00:00",
+    "participant_count": 3,
+}
+
 
 class FakeAccountService:
     def join_contest(self, user_id, contest_slug):
@@ -59,6 +74,15 @@ class FakeOrderService:
         return ORDER
 
 
+class FakeContestService:
+    def list_contests(self):
+        return [CONTEST]
+
+    def get_contest(self, slug):
+        assert slug == "practice-arena"
+        return CONTEST
+
+
 def _make_app(authenticated=False):
     app = FastAPI()
     app.include_router(router)
@@ -78,6 +102,28 @@ def test_join_contest_requires_auth():
     response = client.post("/api/crypto/contests/practice-arena/join")
 
     assert response.status_code == 401
+
+
+def test_list_public_contests_does_not_require_auth():
+    app, _order_service = _make_app()
+    app.dependency_overrides[get_contest_service] = lambda: FakeContestService()
+    client = TestClient(app)
+
+    response = client.get("/api/crypto/contests")
+
+    assert response.status_code == 200
+    assert response.json() == [CONTEST]
+
+
+def test_get_public_contest_detail_does_not_require_auth():
+    app, _order_service = _make_app()
+    app.dependency_overrides[get_contest_service] = lambda: FakeContestService()
+    client = TestClient(app)
+
+    response = client.get("/api/crypto/contests/practice-arena")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "practice-arena"
 
 
 def test_join_contest_returns_persistent_account():
