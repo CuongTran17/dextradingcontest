@@ -18,7 +18,7 @@
 - Modify: `src/views/ContestDetail.vue`
 - Test: `src/router/__tests__/index.test.ts`
 
-- [ ] **Step 1: Write the failing route test**
+- [x] **Step 1: Write the failing route test**
 
 Add `/contests/practice-arena/trade/BTCUSDT` to the guest route table in `src/router/__tests__/index.test.ts`:
 
@@ -36,13 +36,13 @@ it.each([
 })
 ```
 
-- [ ] **Step 2: Run route test to verify it fails**
+- [x] **Step 2: Run route test to verify it fails**
 
 Run: `npm.cmd run test:unit -- src/router/__tests__/index.test.ts`
 
 Expected: FAIL because `/contests/practice-arena/trade/BTCUSDT` resolves to `ContestDetail` or not found.
 
-- [ ] **Step 3: Add contest-scoped route**
+- [x] **Step 3: Add contest-scoped route**
 
 Add this route before `/contests/:contestId` in `src/router/index.ts`:
 
@@ -57,7 +57,7 @@ Add this route before `/contests/:contestId` in `src/router/index.ts`:
 
 Add `CryptoContestTrade` to `publicRouteNames`.
 
-- [ ] **Step 4: Link contest detail to scoped trade**
+- [x] **Step 4: Link contest detail to scoped trade**
 
 In `src/views/ContestDetail.vue`, add a `Trade` router-link beside Join and Leaderboard:
 
@@ -70,13 +70,13 @@ In `src/views/ContestDetail.vue`, add a `Trade` router-link beside Join and Lead
 </router-link>
 ```
 
-- [ ] **Step 5: Run route test to verify it passes**
+- [x] **Step 5: Run route test to verify it passes**
 
 Run: `npm.cmd run test:unit -- src/router/__tests__/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/router/index.ts src/router/__tests__/index.test.ts src/views/ContestDetail.vue docs/superpowers/plans/2026-06-27-contest-scoped-trading.md
@@ -90,7 +90,7 @@ git commit -m "feat: add contest scoped trade route"
 - Modify: `src/views/__tests__/CryptoTrade.test.ts`
 - Test: `src/views/__tests__/CryptoTrade.test.ts`
 
-- [ ] **Step 1: Write failing trade tests**
+- [x] **Step 1: Write failing trade tests**
 
 Update the vue-router mock in `src/views/__tests__/CryptoTrade.test.ts` to expose mutable route params:
 
@@ -154,13 +154,13 @@ it('passes disabled state and reason when account is frozen', async () => {
 })
 ```
 
-- [ ] **Step 2: Run trade test to verify it fails**
+- [x] **Step 2: Run trade test to verify it fails**
 
 Run: `npm.cmd run test:unit -- src/views/__tests__/CryptoTrade.test.ts`
 
 Expected: FAIL because `CryptoTrade.vue` still uses `DEFAULT_CONTEST_ID` and `OrderTicket` does not accept `disabledReason`.
 
-- [ ] **Step 3: Implement contest id and blocked reason**
+- [x] **Step 3: Implement contest id and blocked reason**
 
 In `src/views/CryptoTrade.vue`, add:
 
@@ -188,7 +188,7 @@ const orderTicketDisabled = computed(
 
 Replace all `DEFAULT_CONTEST_ID` account/order calls with `contestId.value`.
 
-- [ ] **Step 4: Pass reason to OrderTicket**
+- [x] **Step 4: Pass reason to OrderTicket**
 
 In `src/views/CryptoTrade.vue`, pass:
 
@@ -205,13 +205,13 @@ In `src/components/crypto/OrderTicket.vue`, add `disabledReason?: string` to pro
 </p>
 ```
 
-- [ ] **Step 5: Run trade test to verify it passes**
+- [x] **Step 5: Run trade test to verify it passes**
 
 Run: `npm.cmd run test:unit -- src/views/__tests__/CryptoTrade.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/views/CryptoTrade.vue src/components/crypto/OrderTicket.vue src/views/__tests__/CryptoTrade.test.ts
@@ -224,25 +224,25 @@ git commit -m "feat: scope trading to contest route"
 - Verify: frontend unit suite
 - Verify: production build
 
-- [ ] **Step 1: Run focused route and trade tests**
+- [x] **Step 1: Run focused route and trade tests**
 
 Run: `npm.cmd run test:unit -- src/router/__tests__/index.test.ts src/views/__tests__/CryptoTrade.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 2: Run full frontend unit suite**
+- [x] **Step 2: Run full frontend unit suite**
 
 Run: `npm.cmd run test:unit`
 
 Expected: PASS.
 
-- [ ] **Step 3: Run production build**
+- [x] **Step 3: Run production build**
 
 Run: `npm.cmd run build`
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit docs if plan status changed**
+- [x] **Step 4: Commit docs if plan status changed**
 
 ```bash
 git add docs/superpowers/plans/2026-06-27-contest-scoped-trading.md
