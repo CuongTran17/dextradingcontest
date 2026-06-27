@@ -10,14 +10,12 @@
           <th class="px-4 py-3">ROI</th>
           <th class="px-4 py-3">Volume</th>
           <th class="px-4 py-3">Trades</th>
-          <th class="px-4 py-3">Win Rate</th>
-          <th class="px-4 py-3">Max DD</th>
           <th class="px-4 py-3">Last Trade</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-        <tr v-for="(row, index) in sortedRows" :key="row.user">
-          <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">#{{ index + 1 }}</td>
+        <tr v-for="row in sortedRows" :key="row.user">
+          <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">#{{ row.rank }}</td>
           <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ row.user }}</td>
           <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ formatCurrency(row.equity) }}</td>
           <td class="px-4 py-3" :class="row.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'">
@@ -28,9 +26,7 @@
           </td>
           <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ formatCurrency(row.volume) }}</td>
           <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ row.tradeCount }}</td>
-          <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ row.winRate }}%</td>
-          <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ row.maxDrawdown }}%</td>
-          <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ row.lastTrade }}</td>
+          <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ row.lastTrade ?? '-' }}</td>
         </tr>
       </tbody>
     </table>
@@ -40,20 +36,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-export interface LeaderboardRow {
-  user: string
-  equity: number
-  pnl: number
-  roi: number
-  volume: number
-  tradeCount: number
-  winRate: number
-  maxDrawdown: number
-  lastTrade: string
-}
+import type { LeaderboardRow } from '@/types/crypto'
 
-const props = defineProps<{ rows: LeaderboardRow[] }>()
-const sortedRows = computed(() => [...props.rows].sort((a, b) => b.roi - a.roi))
+const props = withDefaults(defineProps<{ rows?: LeaderboardRow[] }>(), {
+  rows: () => [],
+})
+const sortedRows = computed(() => [...props.rows].sort((a, b) => a.rank - b.rank))
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {

@@ -1,7 +1,12 @@
 <template>
   <main class="space-y-6">
     <SimulationDisclaimer />
-    <section class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
+    <p v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading contest...</p>
+    <p v-else-if="loadError" class="text-sm text-rose-600">{{ loadError }}</p>
+    <section
+      v-else-if="contest"
+      class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]"
+    >
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p class="text-sm uppercase text-gray-500 dark:text-gray-400">{{ contest.status }}</p>
@@ -51,25 +56,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
-import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
+import { fetchContest } from '@/services/cryptoContestApi'
 import { joinCryptoContest } from '@/services/cryptoTradingApi'
+import type { Contest } from '@/types/crypto'
 
 const route = useRoute()
+const contest = ref<Contest | null>(null)
+const loading = ref(true)
+const loadError = ref('')
 const joining = ref(false)
 const joined = ref(false)
 const joinError = ref('')
-const contest = computed(
-  () =>
-    CRYPTO_CONTESTS.find((item) => item.id === route.params.contestId) ??
-    CRYPTO_CONTESTS.find((item) => item.id === DEFAULT_CONTEST_ID)!,
-)
+const contestId = computed(() => String(route.params.contestId || 'practice-arena'))
+
+onMounted(async () => {
+  try {
+    contest.value = await fetchContest(contestId.value)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load contest'
+  } finally {
+    loading.value = false
+  }
+})
 
 async function joinContest() {
-  if (joining.value || joined.value) return
+  if (joining.value || joined.value || !contest.value) return
 
   joining.value = true
   joinError.value = ''

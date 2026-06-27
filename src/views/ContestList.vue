@@ -7,6 +7,9 @@
       </p>
     </div>
 
+    <p v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading contests...</p>
+    <p v-else-if="loadError" class="text-sm text-rose-600">{{ loadError }}</p>
+    <template v-else>
     <section v-for="group in groupedContests" :key="group.status" class="space-y-3">
       <h2 class="text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">
         {{ group.status }}
@@ -28,21 +31,36 @@
         </router-link>
       </div>
     </section>
+    </template>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-import { CRYPTO_CONTESTS } from '@/constants/cryptoContests'
-import type { ContestStatus } from '@/types/crypto'
+import { fetchContests } from '@/services/cryptoContestApi'
+import type { Contest, ContestStatus } from '@/types/crypto'
+
+const contests = ref<Contest[]>([])
+const loading = ref(true)
+const loadError = ref('')
+
+onMounted(async () => {
+  try {
+    contests.value = await fetchContests()
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load contests'
+  } finally {
+    loading.value = false
+  }
+})
 
 const statuses: ContestStatus[] = ['practice', 'upcoming', 'active', 'ended']
 const groupedContests = computed(() =>
   statuses
     .map((status) => ({
       status,
-      contests: CRYPTO_CONTESTS.filter((contest) => contest.status === status),
+      contests: contests.value.filter((contest) => contest.status === status),
     }))
     .filter((group) => group.contests.length > 0),
 )
