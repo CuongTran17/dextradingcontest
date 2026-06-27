@@ -17,6 +17,7 @@ describe('router guest access', () => {
   it.each([
     ['/', 'CryptoDashboard'],
     ['/trade/BTCUSDT', 'CryptoTrade'],
+    ['/contests/practice-arena/trade/BTCUSDT', 'CryptoContestTrade'],
     ['/contests', 'ContestList'],
     ['/contests/practice-arena', 'ContestDetail'],
     ['/contests/practice-arena/leaderboard', 'ContestLeaderboard'],

@@ -27,6 +27,12 @@ const router = createRouter({
       meta: { title: 'Trading Contests' },
     },
     {
+      path: '/contests/:contestId/trade/:symbol?',
+      name: 'CryptoContestTrade',
+      component: () => import('../views/CryptoTrade.vue'),
+      meta: { title: 'Trade Contest' },
+    },
+    {
       path: '/contests/:contestId',
       name: 'ContestDetail',
       component: () => import('../views/ContestDetail.vue'),
@@ -88,6 +94,7 @@ router.beforeEach((to, from, next) => {
   const publicRouteNames = new Set([
     'CryptoDashboard',
     'CryptoTrade',
+    'CryptoContestTrade',
     'ContestList',
     'ContestDetail',
     'ContestLeaderboard',

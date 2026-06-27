@@ -24,6 +24,12 @@
             {{ joined ? 'Joined' : joining ? 'Joining...' : 'Join Contest' }}
           </button>
           <router-link
+            class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-gray-900"
+            :to="`/contests/${contest.id}/trade/${contest.symbols[0] || 'BTCUSDT'}`"
+          >
+            Trade
+          </router-link>
+          <router-link
             class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
             :to="`/contests/${contest.id}/leaderboard`"
           >
