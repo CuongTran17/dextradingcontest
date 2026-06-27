@@ -1,6 +1,8 @@
 export type CryptoSymbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'XRPUSDT' | 'BNBUSDT'
 export type ContestStatus = 'practice' | 'upcoming' | 'active' | 'ended'
 export type RawContestStatus = 'draft' | 'scheduled' | 'active' | 'settling' | 'completed' | 'cancelled'
+export type ParticipantStatus = 'active' | 'locked' | 'disqualified'
+export type TradingAccountStatus = 'active' | 'frozen' | 'closed'
 export type OrderSide = 'buy' | 'sell'
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
 export type CryptoIndicator = 'MACD'
@@ -76,6 +78,19 @@ export interface Contest {
 export interface LeaderboardRow {
   rank: number
   user: string
+  equity: number
+  pnl: number
+  roi: number
+  volume: number
+  tradeCount: number
+  lastTrade: string | null
+}
+
+export interface AdminContestParticipant {
+  userId: number
+  user: string
+  status: ParticipantStatus
+  accountStatus: TradingAccountStatus
   equity: number
   pnl: number
   roi: number

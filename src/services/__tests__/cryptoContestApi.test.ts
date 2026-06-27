@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createAdminCryptoContest,
+  fetchAdminContestParticipants,
   fetchContest,
   fetchContestLeaderboard,
   fetchContests,
+  setAdminContestParticipantStatus,
 } from '@/services/cryptoContestApi'
 import { backendFetch } from '@/services/httpClient'
 
@@ -110,5 +112,38 @@ describe('cryptoContestApi', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer token-123' },
     })
+  })
+
+  it('loads and moderates admin contest participants', async () => {
+    vi.mocked(backendFetch)
+      .mockResolvedValueOnce([
+        {
+          user_id: 2,
+          user: 'Student B',
+          status: 'active',
+          account_status: 'active',
+          equity: 11000,
+          pnl: 1000,
+          roi: 10,
+          volume: 2500,
+          trade_count: 1,
+          last_trade: 'BTCUSDT buy',
+        },
+      ])
+      .mockResolvedValueOnce({
+        user_id: 2,
+        user: 'Student B',
+        status: 'locked',
+        account_status: 'frozen',
+        equity: 11000,
+        pnl: 1000,
+        roi: 10,
+        volume: 2500,
+        trade_count: 1,
+        last_trade: 'BTCUSDT buy',
+      })
+
+    expect((await fetchAdminContestParticipants('practice-arena'))[0].accountStatus).toBe('active')
+    expect((await setAdminContestParticipantStatus('practice-arena', 2, 'locked')).status).toBe('locked')
   })
 })

@@ -1,10 +1,12 @@
 import { getToken } from '@/services/authApi'
 import { backendFetch, normalizeBackendUrl } from '@/services/httpClient'
 import type {
+  AdminContestParticipant,
   Contest,
   ContestCreateInput,
   ContestUpdateInput,
   LeaderboardRow,
+  ParticipantStatus,
 } from '@/types/crypto'
 
 const BACKEND_URL = normalizeBackendUrl(import.meta.env.VITE_BACKEND_URL)
@@ -26,6 +28,19 @@ interface BackendContest {
 interface BackendLeaderboardRow {
   rank: number
   user: string
+  equity: number
+  pnl: number
+  roi: number
+  volume: number
+  trade_count: number
+  last_trade: string | null
+}
+
+interface BackendAdminContestParticipant {
+  user_id: number
+  user: string
+  status: ParticipantStatus
+  account_status: AdminContestParticipant['accountStatus']
   equity: number
   pnl: number
   roi: number
@@ -143,6 +158,35 @@ export async function setAdminCryptoContestStatus(
   return mapContest(contest)
 }
 
+export async function fetchAdminContestParticipants(
+  contestId: string,
+): Promise<AdminContestParticipant[]> {
+  const participants = await backendFetch<BackendAdminContestParticipant[]>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/participants`,
+    {
+      headers: adminHeaders(),
+    },
+  )
+  return participants.map(mapAdminContestParticipant)
+}
+
+export async function setAdminContestParticipantStatus(
+  contestId: string,
+  userId: number,
+  status: ParticipantStatus,
+): Promise<AdminContestParticipant> {
+  const participant = await backendFetch<BackendAdminContestParticipant>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/participants/${userId}/status?status=${encodeURIComponent(status)}`,
+    {
+      method: 'PUT',
+      headers: adminHeaders(),
+    },
+  )
+  return mapAdminContestParticipant(participant)
+}
+
 function mapContest(contest: BackendContest): Contest {
   return {
     id: contest.id,
@@ -155,5 +199,22 @@ function mapContest(contest: BackendContest): Contest {
     startsAt: contest.starts_at ?? '',
     endsAt: contest.ends_at ?? '',
     participantCount: contest.participant_count,
+  }
+}
+
+function mapAdminContestParticipant(
+  participant: BackendAdminContestParticipant,
+): AdminContestParticipant {
+  return {
+    userId: participant.user_id,
+    user: participant.user,
+    status: participant.status,
+    accountStatus: participant.account_status,
+    equity: participant.equity,
+    pnl: participant.pnl,
+    roi: participant.roi,
+    volume: participant.volume,
+    tradeCount: participant.trade_count,
+    lastTrade: participant.last_trade,
   }
 }
