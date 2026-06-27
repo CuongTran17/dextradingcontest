@@ -15,6 +15,8 @@ features have been removed from the runtime. Their frontend code is retained und
 - Binance Spot prices, candles, and order-book snapshots.
 - BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, and BNBUSDT.
 - MySQL-backed contest participants, accounts, balances, positions, orders, and fills.
+- MySQL-backed public contest list/detail pages and live-equity leaderboards.
+- Admin contest creation and status management without editing user results.
 - One isolated virtual account per user and contest.
 - Idempotent market orders executed against Binance order-book depth.
 - Dedicated DuckDB warehouse with a rolling year of `1m` Spot candles.
@@ -143,13 +145,33 @@ GET /api/crypto/candles?symbol=BTCUSDT&interval=1h
 GET /api/crypto/orderbook?symbol=BTCUSDT
 ```
 
-Authenticated trading endpoints:
+Contest and trading endpoints:
 
 ```text
+GET  /api/crypto/contests
+GET  /api/crypto/contests/{contest_id}
+GET  /api/crypto/contests/{contest_id}/leaderboard
 POST /api/crypto/contests/{contest_id}/join
 GET  /api/crypto/accounts/{contest_id}
 POST /api/crypto/orders/market
 ```
+
+Admin contest endpoints:
+
+```text
+GET  /api/admin/crypto/contests
+POST /api/admin/crypto/contests
+PUT  /api/admin/crypto/contests/{contest_id}
+PUT  /api/admin/crypto/contests/{contest_id}/status
+```
+
+### Crypto Contest Data
+
+- MySQL stores users, contests, participants, virtual balances, positions, orders, and fills.
+- DuckDB stores Binance market candles and precomputed indicators.
+- Public contest APIs live under `/api/crypto/contests`.
+- Admin contest APIs live under `/api/admin/crypto/contests` and require an admin JWT.
+- Admins can create contests and change contest status, but cannot edit user trading results.
 
 ## Verification
 
@@ -164,7 +186,7 @@ npm.cmd run build
 
 1. Binance WebSocket ingestion for current `1m` candles and synchronized order books.
 2. Persisted leaderboard snapshots and scheduled contest ranking updates.
-3. Admin contest management for starting capital, start/end times, locking, and invalidation.
+3. Admin participant moderation for locking or disqualifying broken accounts.
 4. Binance Futures market data after the Spot workflow is stable.
 
 ## Safety
