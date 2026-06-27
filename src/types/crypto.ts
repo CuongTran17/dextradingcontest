@@ -1,5 +1,6 @@
 export type CryptoSymbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'XRPUSDT' | 'BNBUSDT'
 export type ContestStatus = 'practice' | 'upcoming' | 'active' | 'ended'
+export type RawContestStatus = 'draft' | 'scheduled' | 'active' | 'settling' | 'completed' | 'cancelled'
 export type OrderSide = 'buy' | 'sell'
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
 export type CryptoIndicator = 'MACD'
@@ -69,6 +70,36 @@ export interface Contest {
   startsAt: string
   endsAt: string
   participantCount: number
+}
+
+export interface LeaderboardRow {
+  rank: number
+  user: string
+  equity: number
+  pnl: number
+  roi: number
+  volume: number
+  tradeCount: number
+  lastTrade: string | null
+}
+
+export interface ContestCreateInput {
+  slug: string
+  title: string
+  mode: 'practice' | 'contest'
+  status: 'draft' | 'scheduled' | 'active'
+  initialBalance: number
+  symbols: CryptoSymbol[]
+  startsAt?: string | null
+  endsAt?: string | null
+}
+
+export interface ContestUpdateInput {
+  title?: string
+  status?: RawContestStatus
+  symbols?: CryptoSymbol[]
+  startsAt?: string | null
+  endsAt?: string | null
 }
 
 export interface Position {
