@@ -69,6 +69,9 @@ import {
   LineSeries,
   createChart,
   type IChartApi,
+  type LogicalRange,
+  type MouseEventHandler,
+  type Time,
 } from 'lightweight-charts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -122,8 +125,14 @@ let macdChart: IChartApi | null = null
 let macdHistogramSeries: ReturnType<IChartApi['addSeries']> | null = null
 let macdLineSeries: ReturnType<IChartApi['addSeries']> | null = null
 let macdSignalSeries: ReturnType<IChartApi['addSeries']> | null = null
+let priceCrosshairHandler: MouseEventHandler<Time> | null = null
+let macdCrosshairHandler: MouseEventHandler<Time> | null = null
+let priceLogicalRangeHandler: ((range: LogicalRange | null) => void) | null = null
+let macdLogicalRangeHandler: ((range: LogicalRange | null) => void) | null = null
 let unsubscribeCandle: (() => void) | undefined
 const candles = ref<Candle[]>([])
+let syncingCrosshair = false
+let syncingLogicalRange = false
 
 function setChartData(candles: Candle[]) {
   candles.sort((left, right) => left.time - right.time)
@@ -209,6 +218,82 @@ function ensureMacdChart() {
   })
 }
 
+function timeKey(time: Time | undefined): string {
+  return typeof time === 'object' ? JSON.stringify(time) : String(time)
+}
+
+function candleCloseAt(time: Time | undefined): number | null {
+  if (time === undefined) return null
+  const key = timeKey(time)
+  return candles.value.find((candle) => timeKey(candle.time as never) === key)?.close ?? null
+}
+
+function macdValueAt(time: Time | undefined): number | null {
+  if (time === undefined) return null
+  const key = timeKey(time)
+  return macdData.value?.points.find((point) => timeKey(point.time as never) === key)?.macd ?? null
+}
+
+function syncCrosshairToTarget(
+  targetChart: IChartApi | null,
+  targetSeries: ReturnType<IChartApi['addSeries']> | null,
+  time: Time | undefined,
+  value: number | null,
+) {
+  if (!targetChart || !targetSeries || syncingCrosshair) return
+
+  syncingCrosshair = true
+  if (time === undefined || value === null) {
+    targetChart.clearCrosshairPosition()
+  } else {
+    targetChart.setCrosshairPosition(value, time, targetSeries)
+  }
+  syncingCrosshair = false
+}
+
+function syncLogicalRangeToTarget(targetChart: IChartApi | null, range: LogicalRange | null) {
+  if (!targetChart || !range || syncingLogicalRange) return
+
+  syncingLogicalRange = true
+  targetChart.timeScale().setVisibleLogicalRange(range)
+  syncingLogicalRange = false
+}
+
+function cleanupChartSync() {
+  if (chart && priceCrosshairHandler) chart.unsubscribeCrosshairMove(priceCrosshairHandler)
+  if (macdChart && macdCrosshairHandler) macdChart.unsubscribeCrosshairMove(macdCrosshairHandler)
+  if (chart && priceLogicalRangeHandler) {
+    chart.timeScale().unsubscribeVisibleLogicalRangeChange(priceLogicalRangeHandler)
+  }
+  if (macdChart && macdLogicalRangeHandler) {
+    macdChart.timeScale().unsubscribeVisibleLogicalRangeChange(macdLogicalRangeHandler)
+  }
+  priceCrosshairHandler = null
+  macdCrosshairHandler = null
+  priceLogicalRangeHandler = null
+  macdLogicalRangeHandler = null
+}
+
+function wireChartSync() {
+  if (!chart || !series || !macdChart || !macdLineSeries) return
+
+  cleanupChartSync()
+
+  priceCrosshairHandler = (param) => {
+    syncCrosshairToTarget(macdChart, macdLineSeries, param.time, macdValueAt(param.time))
+  }
+  macdCrosshairHandler = (param) => {
+    syncCrosshairToTarget(chart, series, param.time, candleCloseAt(param.time))
+  }
+  priceLogicalRangeHandler = (range) => syncLogicalRangeToTarget(macdChart, range)
+  macdLogicalRangeHandler = (range) => syncLogicalRangeToTarget(chart, range)
+
+  chart.subscribeCrosshairMove(priceCrosshairHandler)
+  macdChart.subscribeCrosshairMove(macdCrosshairHandler)
+  chart.timeScale().subscribeVisibleLogicalRangeChange(priceLogicalRangeHandler)
+  macdChart.timeScale().subscribeVisibleLogicalRangeChange(macdLogicalRangeHandler)
+}
+
 function renderMacdChart() {
   if (selectedIndicator.value !== 'MACD' || !macdData.value) return
   ensureMacdChart()
@@ -223,6 +308,7 @@ function renderMacdChart() {
   macdLineSeries?.setData(points.map((point) => ({ time: point.time as never, value: point.macd })))
   macdSignalSeries?.setData(points.map((point) => ({ time: point.time as never, value: point.signal })))
   macdChart?.timeScale().fitContent()
+  wireChartSync()
 }
 
 function applyRealtimeCandle(candle: Candle) {
@@ -248,6 +334,7 @@ watch(() => [props.symbol, props.timeframe], () => {
 
 onBeforeUnmount(() => {
   unsubscribeCandle?.()
+  cleanupChartSync()
   chart?.remove()
   macdChart?.remove()
   chart = null
