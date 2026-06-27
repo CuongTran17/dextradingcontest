@@ -6,9 +6,20 @@ from sqlalchemy.orm import Session
 from src.api.auth import require_role
 from src.database.db import get_db
 from src.database.user_models import User
+from src.repositories.crypto_trading import CryptoTradingRepository
+from src.schemas.crypto_trading import ContestCreate, ContestUpdate
+from src.services.crypto_contests import (
+    ContestNotFoundError,
+    ContestValidationError,
+    CryptoContestService,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 _require_admin = require_role("admin")
+
+
+def get_crypto_contest_service(db: Session = Depends(get_db)) -> CryptoContestService:
+    return CryptoContestService(CryptoTradingRepository(db))
 
 
 @router.get("/users")
@@ -107,3 +118,56 @@ def unlock_user(
     user.locked_reason = None
     db.commit()
     return {"message": f"Unlocked account {user.email}"}
+
+
+@router.get("/crypto/contests")
+def admin_list_crypto_contests(
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    return service.list_contests()
+
+
+@router.post("/crypto/contests")
+def admin_create_crypto_contest(
+    body: ContestCreate,
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    try:
+        return service.create_contest(body, current_user.id)
+    except ContestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/crypto/contests/{contest_id}")
+def admin_update_crypto_contest(
+    contest_id: str,
+    body: ContestUpdate,
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    try:
+        return service.update_contest(contest_id, body)
+    except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ContestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/crypto/contests/{contest_id}/status")
+def admin_set_crypto_contest_status(
+    contest_id: str,
+    status: str = Query(...),
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    try:
+        return service.set_contest_status(contest_id, status)
+    except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ContestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

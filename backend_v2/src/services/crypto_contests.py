@@ -1,10 +1,15 @@
 from datetime import datetime, timezone
 
-from src.database.crypto_models import Contest
+from src.database.crypto_models import Contest, ContestAsset
 from src.repositories.crypto_trading import CryptoTradingRepository
+from src.schemas.crypto_trading import ContestCreate, ContestUpdate
 
 
 class ContestNotFoundError(Exception):
+    pass
+
+
+class ContestValidationError(Exception):
     pass
 
 
@@ -37,6 +42,79 @@ class CryptoContestService:
         contest = self.repository.get_contest_by_slug(slug)
         if contest is None:
             raise ContestNotFoundError(f"Contest '{slug}' not found")
+        return self._map_contest(contest)
+
+    def create_contest(self, body: ContestCreate, created_by: int | None) -> dict:
+        if self.repository.get_contest_by_slug(body.slug):
+            raise ContestValidationError(f"Contest slug '{body.slug}' already exists")
+        assets = self.repository.get_assets_by_symbols(list(dict.fromkeys(body.symbols)))
+        found = {asset.symbol for asset in assets}
+        missing = [symbol for symbol in body.symbols if symbol not in found]
+        if missing:
+            raise ContestValidationError(f"Unsupported symbols: {', '.join(missing)}")
+
+        contest = Contest(
+            slug=body.slug,
+            title=body.title,
+            mode=body.mode,
+            status=body.status,
+            initial_balance=body.initial_balance,
+            quote_asset=body.quote_asset,
+            starts_at=body.starts_at,
+            ends_at=body.ends_at,
+            fee_rate=body.fee_rate,
+            rules_json="{}",
+            created_by=created_by,
+        )
+        for asset in assets:
+            contest.assets.append(ContestAsset(asset=asset, is_enabled=True))
+
+        self.repository.db.add(contest)
+        self.repository.commit()
+        return self._map_contest(contest)
+
+    def update_contest(self, slug: str, body: ContestUpdate) -> dict:
+        contest = self.repository.get_contest_by_slug(slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{slug}' not found")
+
+        if body.title is not None:
+            contest.title = body.title
+        if body.status is not None:
+            contest.status = body.status
+        if body.starts_at is not None:
+            contest.starts_at = body.starts_at
+        if body.ends_at is not None:
+            contest.ends_at = body.ends_at
+        if body.symbols is not None:
+            assets = self.repository.get_assets_by_symbols(list(dict.fromkeys(body.symbols)))
+            found = {asset.symbol for asset in assets}
+            missing = [symbol for symbol in body.symbols if symbol not in found]
+            if missing:
+                raise ContestValidationError(f"Unsupported symbols: {', '.join(missing)}")
+            contest.assets.clear()
+            for asset in assets:
+                contest.assets.append(ContestAsset(asset=asset, is_enabled=True))
+
+        self.repository.commit()
+        return self._map_contest(contest)
+
+    def set_contest_status(self, slug: str, status: str) -> dict:
+        contest = self.repository.get_contest_by_slug(slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{slug}' not found")
+        if status not in {
+            "draft",
+            "scheduled",
+            "active",
+            "settling",
+            "completed",
+            "cancelled",
+        }:
+            raise ContestValidationError("Invalid contest status")
+
+        contest.status = status
+        self.repository.commit()
         return self._map_contest(contest)
 
     def _map_contest(self, contest: Contest) -> dict:
