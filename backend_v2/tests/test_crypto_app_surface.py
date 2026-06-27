@@ -41,6 +41,11 @@ def test_settings_expose_only_crypto_runtime_configuration():
     fields = set(Settings.model_fields)
 
     assert {"mysql_url", "mysql_async_url", "crypto_duckdb_path", "jwt_secret"} <= fields
+    assert {
+        "crypto_repair_on_startup",
+        "crypto_repair_lookback_days",
+        "crypto_repair_interval_seconds",
+    } <= fields
     assert "dnse_market_base_url" not in fields
     assert "kaggle_api_url" not in fields
     assert "sepay_secret_key" not in fields

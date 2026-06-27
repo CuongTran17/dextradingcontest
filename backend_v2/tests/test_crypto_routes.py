@@ -299,6 +299,27 @@ def test_crypto_websocket_returns_error_for_invalid_subscription_symbol():
     assert error == {"type": "error", "message": "Unsupported crypto symbol"}
 
 
+def test_health_includes_crypto_market_repair_status(monkeypatch):
+    from src.routes import health
+
+    async def check_ok():
+        return {"status": "ok"}
+
+    monkeypatch.setattr(health, "_check_database", check_ok)
+    monkeypatch.setattr(health, "_check_migrations", check_ok)
+    app = FastAPI()
+    app.state.crypto_market_repair = SimpleNamespace(
+        status=lambda: {"status": "success", "last_error": None}
+    )
+    app.include_router(health.router)
+    client = TestClient(app)
+
+    response = client.get("/api/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["market_data_repair"] == {"status": "success", "last_error": None}
+
+
 def test_orderbook_returns_503_instead_of_mock_depth(monkeypatch):
     from src.routes import crypto
 

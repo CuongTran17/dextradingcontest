@@ -71,6 +71,13 @@ def _realtime_status(request: Request) -> dict[str, Any]:
     return service.status()
 
 
+def _market_data_repair_status(request: Request) -> dict[str, Any]:
+    service = getattr(request.app.state, "crypto_market_repair", None)
+    if service is None:
+        return {"status": "unavailable"}
+    return service.status()
+
+
 @router.get("/ready")
 async def readiness(request: Request, response: Response) -> dict[str, Any]:
     checks = {
@@ -86,6 +93,7 @@ async def readiness(request: Request, response: Response) -> dict[str, Any]:
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
         "binance_realtime": _realtime_status(request),
+        "market_data_repair": _market_data_repair_status(request),
     }
 
 

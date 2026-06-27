@@ -84,6 +84,8 @@ Copy-Item backend_v2\.env.example backend_v2\.env
 
 Set `MYSQL_URL`, `MYSQL_ASYNC_URL`, and a long random `JWT_SECRET` in
 `backend_v2\.env`. Keep the default DuckDB path unless the warehouse should live elsewhere.
+Market repair is enabled by default with `CRYPTO_REPAIR_ON_STARTUP=true`; it checks the
+existing DuckDB warehouse on backend startup and pulls only missing Binance `1m` ranges.
 
 ### 3. MySQL database
 
@@ -108,6 +110,11 @@ Backfill one rolling year for all configured symbols:
 ```powershell
 npm.cmd run crypto:backfill -- --days 365
 ```
+
+The backend also runs an incremental repair task in the background when it starts.
+If the app was offline for a few hours, the task fetches only those missing `1m`
+candles, then rebuilds `5m`, `15m`, `1h`, `4h`, and indicators. It does not reload
+the full year unless the warehouse is empty.
 
 Run a smaller smoke backfill:
 

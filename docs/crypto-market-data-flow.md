@@ -23,14 +23,24 @@ Run backfill whenever the backend has been offline or WebSocket persistence was 
 
 The repair job fills missing `1m` ranges, rebuilds derived intervals, materializes indicators, and trims data outside the retention window.
 
+## Startup Repair
+
+The backend starts an incremental repair task with these settings:
+
+```env
+CRYPTO_REPAIR_ON_STARTUP=true
+CRYPTO_REPAIR_LOOKBACK_DAYS=365
+CRYPTO_REPAIR_INTERVAL_SECONDS=300
+```
+
+The task does not reload the full lookback window when data already exists. It uses the warehouse gap detection to fetch only missing `1m` ranges, then rebuilds derived intervals and indicators.
+
 ## Next Upgrade
 
-Add a scheduled 24/7 gap-repair job inside the backend:
+Make the repair job easier to observe and operate:
 
-- Run every few minutes.
-- Check the latest closed `1m` candle for each symbol.
-- Backfill missing ranges from Binance REST.
-- Rebuild derived intervals and indicators after repair.
-- Expose data freshness in `/api/health`.
+- Add per-symbol freshness details to `/api/health`.
+- Add admin-visible data source and repair status.
+- Add manual admin trigger for one symbol/time range.
 
 For Futures, keep the same shape but separate `market_type='futures'` and use Binance Futures endpoints instead of mixing Spot and Futures rows.
