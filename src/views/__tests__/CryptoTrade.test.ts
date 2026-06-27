@@ -13,8 +13,10 @@ import {
 } from '@/services/cryptoRealtime'
 import CryptoTrade from '@/views/CryptoTrade.vue'
 
+const routeParams = vi.hoisted(() => ({ value: { symbol: 'BTCUSDT' } as Record<string, string> }))
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { symbol: 'BTCUSDT' } }),
+  useRoute: () => ({ params: routeParams.value }),
   useRouter: () => ({ push: vi.fn() }),
 }))
 
@@ -28,8 +30,10 @@ vi.mock('@/components/crypto/OrderBook.vue', () => ({
 
 vi.mock('@/components/crypto/OrderTicket.vue', () => ({
   default: {
+    name: 'OrderTicket',
+    props: ['disabled', 'disabledReason'],
     emits: ['submit'],
-    template: '<button data-test="submit-order" @click="$emit(\'submit\', { side: \'buy\', quantity: 0.01 })">Buy Sell</button>',
+    template: '<button data-test="submit-order" :disabled="disabled" @click="$emit(\'submit\', { side: \'buy\', quantity: 0.01 })">Buy Sell</button>',
   },
 }))
 
@@ -75,6 +79,7 @@ const accountFixture = {
 
 describe('CryptoTrade', () => {
   beforeEach(() => {
+    routeParams.value = { symbol: 'BTCUSDT' }
     vi.spyOn(window, 'setInterval')
     vi.mocked(getCryptoAccount).mockReset()
     vi.mocked(placeCryptoMarketOrder).mockReset()
@@ -130,6 +135,44 @@ describe('CryptoTrade', () => {
       quantity: 0.01,
     })
     expect(getCryptoAccount).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the contest id from the scoped route for account and orders', async () => {
+    routeParams.value = { contestId: 'summer-crypto-cup', symbol: 'ETHUSDT' }
+    vi.mocked(getCryptoAccount).mockResolvedValue({
+      ...accountFixture,
+      contestId: 'summer-crypto-cup',
+    })
+
+    const wrapper = mount(CryptoTrade)
+    await flushPromises()
+
+    expect(getCryptoAccount).toHaveBeenCalledWith('summer-crypto-cup')
+
+    await wrapper.get('[data-test="submit-order"]').trigger('click')
+    await flushPromises()
+
+    expect(placeCryptoMarketOrder).toHaveBeenCalledWith({
+      contestId: 'summer-crypto-cup',
+      clientOrderId: 'web-001',
+      symbol: 'ETHUSDT',
+      side: 'buy',
+      quantity: 0.01,
+    })
+  })
+
+  it('passes disabled state and reason when account is frozen', async () => {
+    vi.mocked(getCryptoAccount).mockResolvedValue({
+      ...accountFixture,
+      status: 'frozen',
+    })
+
+    const wrapper = mount(CryptoTrade)
+    await flushPromises()
+
+    const ticket = wrapper.getComponent({ name: 'OrderTicket' })
+    expect(ticket.props('disabled')).toBe(true)
+    expect(ticket.props('disabledReason')).toContain('locked')
   })
 
   it('subscribes to realtime prices without starting a price polling timer', async () => {

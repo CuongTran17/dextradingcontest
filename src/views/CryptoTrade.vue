@@ -42,7 +42,8 @@
           :latest-price="latestPrice"
           :error="orderError"
           :submitting="orderSubmitting"
-          :disabled="accountLoading || priceLoading || latestPrice <= 0 || !account"
+          :disabled="orderTicketDisabled"
+          :disabled-reason="accountBlockedReason"
           @submit="submitOrder"
         />
       </div>
@@ -97,6 +98,13 @@ const fallbackPrices = ref<Record<CryptoSymbol, number>>({
   BNBUSDT: 0,
 })
 
+const contestId = computed(() => {
+  const rawContestId = route.params.contestId
+  return typeof rawContestId === 'string' && rawContestId.trim()
+    ? rawContestId
+    : DEFAULT_CONTEST_ID
+})
+
 const currentSymbol = computed<CryptoSymbol>(() => {
   const routeSymbol = typeof route.params.symbol === 'string' ? route.params.symbol : DEFAULT_CRYPTO_SYMBOL
   return CRYPTO_ASSETS.some((asset) => asset.symbol === routeSymbol)
@@ -145,21 +153,37 @@ const metrics = computed(() => {
     tradeCount: current?.orders.length ?? 0,
   }
 })
+const accountBlockedReason = computed(() => {
+  if (!account.value) return accountLoading.value ? 'Loading trading account...' : accountError.value
+  if (account.value.status !== 'active') {
+    return 'This contest account is locked or disqualified. Trading is disabled.'
+  }
+  if (priceLoading.value || latestPrice.value <= 0) return 'Waiting for a live market price.'
+  return ''
+})
+const orderTicketDisabled = computed(
+  () =>
+    accountLoading.value ||
+    priceLoading.value ||
+    latestPrice.value <= 0 ||
+    !account.value ||
+    account.value.status !== 'active',
+)
 
 async function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
-  if (!account.value || orderSubmitting.value) return
+  if (!account.value || orderTicketDisabled.value || orderSubmitting.value) return
 
   orderError.value = ''
   orderSubmitting.value = true
   try {
     await placeCryptoMarketOrder({
-      contestId: DEFAULT_CONTEST_ID,
+      contestId: contestId.value,
       clientOrderId: crypto.randomUUID(),
       symbol: currentSymbol.value,
       side: order.side,
       quantity: order.quantity,
     })
-    account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
+    account.value = await getCryptoAccount(contestId.value)
   } catch (error) {
     orderError.value = error instanceof Error ? error.message : 'Unable to execute order'
   } finally {
@@ -171,10 +195,10 @@ async function loadAccount() {
   accountLoading.value = true
   accountError.value = ''
   try {
-    account.value = await getCryptoAccount(DEFAULT_CONTEST_ID)
+    account.value = await getCryptoAccount(contestId.value)
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
-      account.value = await joinCryptoContest(DEFAULT_CONTEST_ID)
+      account.value = await joinCryptoContest(contestId.value)
     } else {
       accountError.value = error instanceof Error ? error.message : 'Unable to load trading account'
     }

@@ -60,6 +60,9 @@
     <p v-if="error" class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
       {{ error }}
     </p>
+    <p v-if="disabled && disabledReason" class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+      {{ disabledReason }}
+    </p>
 
     <button
       type="submit"
@@ -82,6 +85,7 @@ const props = defineProps<{
   error?: string
   submitting?: boolean
   disabled?: boolean
+  disabledReason?: string
 }>()
 
 const emit = defineEmits<{
