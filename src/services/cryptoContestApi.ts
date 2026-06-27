@@ -117,11 +117,38 @@ export async function updateAdminCryptoContest(
   return mapContest(contest)
 }
 
+export async function fetchAdminCryptoContests(): Promise<Contest[]> {
+  const contests = await backendFetch<BackendContest[]>(
+    BACKEND_URL,
+    '/api/admin/crypto/contests',
+    {
+      headers: adminHeaders(),
+    },
+  )
+  return contests.map(mapContest)
+}
+
+export async function setAdminCryptoContestStatus(
+  contestId: string,
+  status: string,
+): Promise<Contest> {
+  const contest = await backendFetch<BackendContest>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/status?status=${encodeURIComponent(status)}`,
+    {
+      method: 'PUT',
+      headers: adminHeaders(),
+    },
+  )
+  return mapContest(contest)
+}
+
 function mapContest(contest: BackendContest): Contest {
   return {
     id: contest.id,
     title: contest.title,
     status: contest.status,
+    rawStatus: contest.raw_status as Contest['rawStatus'],
     mode: contest.mode,
     initialCapital: contest.initial_capital,
     symbols: contest.symbols,

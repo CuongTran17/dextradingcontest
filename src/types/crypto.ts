@@ -64,6 +64,7 @@ export interface Contest {
   id: string
   title: string
   status: ContestStatus
+  rawStatus?: RawContestStatus
   mode: 'practice' | 'contest'
   initialCapital: number
   symbols: CryptoSymbol[]
