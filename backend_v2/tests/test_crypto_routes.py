@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from types import SimpleNamespace
 
 from src.routes.crypto import router
 
@@ -53,6 +55,20 @@ def make_client_with_realtime():
     return TestClient(app)
 
 
+def _candles(start: int, step: int, count: int):
+    return [
+        {
+            "time": start + step * index,
+            "open": 100.0 + index,
+            "high": 101.0 + index,
+            "low": 99.0 + index,
+            "close": 100.5 + index,
+            "volume": 10.0 + index,
+        }
+        for index in range(count)
+    ]
+
+
 def test_assets_include_all_supported_spot_symbols():
     client = make_client()
 
@@ -98,16 +114,8 @@ def test_orderbook_returns_market_depth(monkeypatch):
 def test_candles_use_duckdb_before_binance(monkeypatch):
     from src.routes import crypto
 
-    expected = [
-        {
-            "time": 1,
-            "open": 100.0,
-            "high": 102.0,
-            "low": 99.0,
-            "close": 101.0,
-            "volume": 10.0,
-        }
-    ]
+    now = int(datetime.now(timezone.utc).timestamp())
+    expected = _candles(now - 9 * 60, 60, 10)
     monkeypatch.setattr(
         crypto,
         "crypto_market_repo",
@@ -124,6 +132,52 @@ def test_candles_use_duckdb_before_binance(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == expected
+
+
+def test_candles_fall_back_to_binance_when_duckdb_window_has_gaps(monkeypatch):
+    from src.routes import crypto
+
+    now = int(datetime.now(timezone.utc).timestamp())
+    gapped = _candles(now - 10 * 60, 60, 5) + _candles(now - 4 * 60, 60, 5)
+    fallback = _candles(now - 9 * 60, 60, 10)
+    calls = []
+    monkeypatch.setattr(
+        crypto,
+        "crypto_market_repo",
+        SimpleNamespace(load_candles=lambda symbol, interval, *, limit: gapped),
+    )
+
+    def get_binance_candles(symbol, timeframe, limit):
+        calls.append((symbol, timeframe, limit))
+        return fallback
+
+    monkeypatch.setattr(crypto, "get_binance_candles", get_binance_candles)
+    client = make_client()
+
+    response = client.get("/api/crypto/candles?symbol=BTCUSDT&timeframe=1m&limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == fallback
+    assert calls == [("BTCUSDT", "1m", 10)]
+
+
+def test_candles_fall_back_to_binance_when_duckdb_window_is_stale(monkeypatch):
+    from src.routes import crypto
+
+    stale = _candles(1_710_000_000, 60 * 60, 10)
+    fallback = _candles(int(datetime.now(timezone.utc).timestamp()) - 9 * 60 * 60, 60 * 60, 10)
+    monkeypatch.setattr(
+        crypto,
+        "crypto_market_repo",
+        SimpleNamespace(load_candles=lambda symbol, interval, *, limit: stale),
+    )
+    monkeypatch.setattr(crypto, "get_binance_candles", lambda symbol, timeframe, limit: fallback)
+    client = make_client()
+
+    response = client.get("/api/crypto/candles?symbol=BTCUSDT&timeframe=1h&limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == fallback
 
 
 def test_indicators_materialize_macd_when_cache_is_empty(monkeypatch):

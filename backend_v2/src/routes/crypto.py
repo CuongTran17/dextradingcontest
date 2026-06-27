@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
@@ -21,6 +22,13 @@ ASSETS = [
     {"symbol": "BNBUSDT", "base_asset": "BNB", "quote_asset": "USDT_TEST", "display_name": "BNB / USDT_TEST"},
 ]
 SUPPORTED_SYMBOLS = [asset["symbol"] for asset in ASSETS]
+WAREHOUSE_TIMEFRAME_SECONDS = {
+    "1m": 60,
+    "5m": 5 * 60,
+    "15m": 15 * 60,
+    "1h": 60 * 60,
+    "4h": 4 * 60 * 60,
+}
 
 CryptoSymbol = Literal[
     "BTCUSDT",
@@ -39,6 +47,34 @@ def get_assets() -> list[dict[str, str]]:
 def _get_realtime_cache(request: Request):
     service = getattr(request.app.state, "crypto_realtime", None)
     return getattr(service, "cache", None)
+
+
+def _is_usable_warehouse_window(
+    rows: list[dict[str, float]],
+    timeframe: str,
+    requested_limit: int,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    if not rows:
+        return False
+
+    step_seconds = WAREHOUSE_TIMEFRAME_SECONDS.get(timeframe)
+    if step_seconds is None:
+        return True
+
+    if len(rows) < min(requested_limit, 2):
+        return False
+
+    timestamps = [int(row["time"]) for row in rows]
+    if any(right - left != step_seconds for left, right in zip(timestamps, timestamps[1:])):
+        return False
+
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    freshness_budget = step_seconds * 2 + 120
+    return int(current_time.timestamp()) - timestamps[-1] <= freshness_budget
 
 
 @router.get("/prices/latest")
@@ -78,7 +114,7 @@ def get_candles(
                 timeframe,
                 limit=limit,
             )
-            if warehouse_rows:
+            if _is_usable_warehouse_window(warehouse_rows, timeframe, limit):
                 return warehouse_rows
         except Exception:
             pass
