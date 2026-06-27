@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from src.database.crypto_models import (
     AccountBalance,
@@ -27,6 +27,33 @@ class CryptoTradingRepository:
                 Contest.status.in_(("active", "scheduled")),
             )
             .first()
+        )
+
+    def list_contests(self) -> list[Contest]:
+        return (
+            self.db.query(Contest)
+            .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
+            .order_by(Contest.starts_at.desc(), Contest.id.desc())
+            .all()
+        )
+
+    def get_contest_by_slug(self, slug: str) -> Contest | None:
+        return (
+            self.db.query(Contest)
+            .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
+            .filter(Contest.slug == slug)
+            .first()
+        )
+
+    def get_assets_by_symbols(self, symbols: list[str]) -> list[CryptoAsset]:
+        return (
+            self.db.query(CryptoAsset)
+            .filter(
+                CryptoAsset.symbol.in_(symbols),
+                CryptoAsset.is_active.is_(True),
+            )
+            .order_by(CryptoAsset.symbol.asc())
+            .all()
         )
 
     def get_participant(
