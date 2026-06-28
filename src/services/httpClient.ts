@@ -55,6 +55,19 @@ function wait(ms: number): Promise<void> {
   })
 }
 
+function normalizeFetchError(error: unknown, timeoutMs: number): Error {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return new Error(`Request timed out after ${timeoutMs}ms`)
+  }
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return new Error(error.message || `Request timed out after ${timeoutMs}ms`)
+  }
+  if (error instanceof Error && error.message.toLowerCase().includes('aborted')) {
+    return new Error(`Request timed out after ${timeoutMs}ms`)
+  }
+  return error instanceof Error ? error : new Error(String(error))
+}
+
 async function readResponseBody(response: Response): Promise<unknown> {
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
@@ -92,7 +105,10 @@ export async function backendFetch<T>(
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+    const timeout = window.setTimeout(
+      () => controller.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError')),
+      timeoutMs,
+    )
 
     try {
       const response = await fetch(`${baseUrl}${path}`, {
@@ -122,9 +138,10 @@ export async function backendFetch<T>(
 
       return body as T
     } catch (error) {
-      lastError = error
+      const normalizedError = normalizeFetchError(error, timeoutMs)
+      lastError = normalizedError
       if (attempt >= retries || error instanceof ApiError) {
-        throw error
+        throw normalizedError
       }
       await wait(250 * (attempt + 1))
     } finally {
