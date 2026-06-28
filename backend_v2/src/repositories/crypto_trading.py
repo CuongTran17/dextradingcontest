@@ -13,6 +13,7 @@ from src.database.crypto_models import (
     TradingAccount,
     TradingOrder,
 )
+from src.database.user_models import User
 
 
 class CryptoTradingRepository:
@@ -85,6 +86,96 @@ class CryptoTradingRepository:
             .filter(Contest.slug == contest_slug)
             .all()
         )
+
+    def list_admin_accounts(
+        self,
+        *,
+        contest_slug: str | None = None,
+        q: str | None = None,
+        status: str | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> tuple[list[TradingAccount], int]:
+        query = (
+            self.db.query(TradingAccount)
+            .join(ContestParticipant)
+            .join(Contest)
+            .join(User, User.id == ContestParticipant.user_id)
+            .options(
+                selectinload(TradingAccount.participant).selectinload(
+                    ContestParticipant.contest
+                ),
+                selectinload(TradingAccount.participant).selectinload(
+                    ContestParticipant.user
+                ),
+                selectinload(TradingAccount.balances),
+                selectinload(TradingAccount.positions).selectinload(Position.asset),
+                selectinload(TradingAccount.orders).selectinload(TradingOrder.asset),
+            )
+        )
+        if contest_slug:
+            query = query.filter(Contest.slug == contest_slug)
+        if status:
+            query = query.filter(TradingAccount.status == status)
+        if q:
+            like = f"%{q.strip()}%"
+            query = query.filter((User.email.ilike(like)) | (User.fullname.ilike(like)))
+        total = query.count()
+        rows = (
+            query.order_by(TradingAccount.updated_at.desc(), TradingAccount.id.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return rows, total
+
+    def get_admin_account_detail(self, account_id: int) -> TradingAccount | None:
+        return (
+            self.db.query(TradingAccount)
+            .options(
+                selectinload(TradingAccount.participant).selectinload(
+                    ContestParticipant.contest
+                ),
+                selectinload(TradingAccount.participant).selectinload(
+                    ContestParticipant.user
+                ),
+                selectinload(TradingAccount.balances),
+                selectinload(TradingAccount.positions).selectinload(Position.asset),
+                selectinload(TradingAccount.orders).selectinload(TradingOrder.fills),
+                selectinload(TradingAccount.orders).selectinload(TradingOrder.asset),
+            )
+            .filter(TradingAccount.id == account_id)
+            .first()
+        )
+
+    def admin_overview_counts(self) -> dict:
+        users_total = self.db.query(User).count()
+        users_locked = self.db.query(User).filter(User.is_locked.is_(True)).count()
+        users_admins = self.db.query(User).filter(User.role == "admin").count()
+        contests_total = self.db.query(Contest).count()
+        contests_active = self.db.query(Contest).filter(Contest.status == "active").count()
+        participants_total = self.db.query(ContestParticipant).count()
+        accounts_total = self.db.query(TradingAccount).count()
+        accounts_active = (
+            self.db.query(TradingAccount)
+            .filter(TradingAccount.status == "active")
+            .count()
+        )
+        total_equity = sum(
+            float(row[0] or 0)
+            for row in self.db.query(TradingAccount.current_equity).all()
+        )
+        return {
+            "users_total": users_total,
+            "users_locked": users_locked,
+            "users_admins": users_admins,
+            "contests_total": contests_total,
+            "contests_active": contests_active,
+            "participants_total": participants_total,
+            "accounts_total": accounts_total,
+            "accounts_active": accounts_active,
+            "total_equity": round(total_equity, 2),
+        }
 
     def get_contest_participant_by_user(
         self,

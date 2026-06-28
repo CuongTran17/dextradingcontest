@@ -148,6 +148,8 @@ class ContestParticipant(Base):
     final_equity = Column(Numeric(36, 18), nullable=True)
     final_roi = Column(Numeric(18, 8), nullable=True)
 
+    contest = relationship("Contest", overlaps="participants")
+    user = relationship("User")
     account = relationship(
         "TradingAccount",
         back_populates="participant",

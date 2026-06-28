@@ -14,6 +14,10 @@ from src.services.crypto_contests import (
     CryptoContestService,
     ParticipantNotFoundError,
 )
+from src.services.crypto_admin_dashboard import (
+    AdminAccountNotFoundError,
+    CryptoAdminDashboardService,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 _require_admin = require_role("admin")
@@ -23,11 +27,19 @@ def get_crypto_contest_service(db: Session = Depends(get_db)) -> CryptoContestSe
     return CryptoContestService(CryptoTradingRepository(db))
 
 
+def get_crypto_admin_dashboard_service(
+    db: Session = Depends(get_db),
+) -> CryptoAdminDashboardService:
+    return CryptoAdminDashboardService(CryptoTradingRepository(db))
+
+
 @router.get("/users")
 def list_users(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     role: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    is_locked: Optional[bool] = Query(default=None),
     current_user: User = Depends(_require_admin),
     db: Session = Depends(get_db),
 ):
@@ -35,6 +47,11 @@ def list_users(
     query = db.query(User)
     if role:
         query = query.filter(User.role == role)
+    if is_locked is not None:
+        query = query.filter(User.is_locked.is_(is_locked))
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter((User.email.ilike(like)) | (User.fullname.ilike(like)))
 
     total = query.count()
     users = (
@@ -119,6 +136,48 @@ def unlock_user(
     user.locked_reason = None
     db.commit()
     return {"message": f"Unlocked account {user.email}"}
+
+
+@router.get("/crypto/overview")
+def admin_crypto_overview(
+    current_user: User = Depends(_require_admin),
+    service: CryptoAdminDashboardService = Depends(get_crypto_admin_dashboard_service),
+):
+    del current_user
+    return service.overview()
+
+
+@router.get("/crypto/accounts")
+def admin_list_crypto_accounts(
+    contest_id: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(_require_admin),
+    service: CryptoAdminDashboardService = Depends(get_crypto_admin_dashboard_service),
+):
+    del current_user
+    return service.list_accounts(
+        contest_id=contest_id,
+        q=q,
+        status=status,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get("/crypto/accounts/{account_id}")
+def admin_get_crypto_account(
+    account_id: int,
+    current_user: User = Depends(_require_admin),
+    service: CryptoAdminDashboardService = Depends(get_crypto_admin_dashboard_service),
+):
+    del current_user
+    try:
+        return service.get_account(account_id)
+    except AdminAccountNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/crypto/contests")

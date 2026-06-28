@@ -167,10 +167,19 @@ POST /api/crypto/orders/market
 Admin contest endpoints:
 
 ```text
+GET  /api/admin/users?page=1&per_page=20&role=user&q=email&is_locked=false
+PUT  /api/admin/users/{user_id}/role?role=admin
+PUT  /api/admin/users/{user_id}/lock?reason=...
+PUT  /api/admin/users/{user_id}/unlock
+GET  /api/admin/crypto/overview
+GET  /api/admin/crypto/accounts?contest_id=practice-arena&page=1&per_page=20
+GET  /api/admin/crypto/accounts/{account_id}
 GET  /api/admin/crypto/contests
 POST /api/admin/crypto/contests
 PUT  /api/admin/crypto/contests/{contest_id}
 PUT  /api/admin/crypto/contests/{contest_id}/status
+GET  /api/admin/crypto/contests/{contest_id}/participants
+PUT  /api/admin/crypto/contests/{contest_id}/participants/{user_id}/status?status=locked
 ```
 
 ### Crypto Contest Data
@@ -179,7 +188,10 @@ PUT  /api/admin/crypto/contests/{contest_id}/status
 - DuckDB stores Binance market candles and precomputed indicators.
 - Public contest APIs live under `/api/crypto/contests`.
 - Admin contest APIs live under `/api/admin/crypto/contests` and require an admin JWT.
+- Admin dashboard APIs live under `/api/admin/crypto/overview` and `/api/admin/crypto/accounts`.
 - Admins can create contests and change contest status, but cannot edit user trading results.
+- Admins can observe account balances, positions, orders, fills, equity, PnL, and ROI.
+- Admins must not edit account balances, positions, orders, fills, PnL, or leaderboard results directly.
 - Admins can list contest participants and set participant status to active, locked, or disqualified.
 - Locked or disqualified participants have their trading account frozen for that contest.
 

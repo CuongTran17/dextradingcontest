@@ -18,6 +18,9 @@ def test_admin_router_exposes_users_and_crypto_contests_only():
     assert "/api/admin/users/{user_id}/role" in paths
     assert "/api/admin/users/{user_id}/lock" in paths
     assert "/api/admin/users/{user_id}/unlock" in paths
+    assert "/api/admin/crypto/overview" in paths
+    assert "/api/admin/crypto/accounts" in paths
+    assert "/api/admin/crypto/accounts/{account_id}" in paths
     assert "/api/admin/crypto/contests" in paths
     assert "/api/admin/crypto/contests/{contest_id}" in paths
     assert "/api/admin/crypto/contests/{contest_id}/status" in paths
@@ -27,3 +30,11 @@ def test_admin_router_exposes_users_and_crypto_contests_only():
     assert not any("/flash-sales" in path for path in paths)
     assert not any("/sales-stats" in path for path in paths)
     assert not any("/user-portfolios" in path for path in paths)
+
+
+def test_list_users_query_accepts_q_and_is_locked_parameters():
+    schema = make_client().app.openapi()
+    params = schema["paths"]["/api/admin/users"]["get"]["parameters"]
+    names = {param["name"] for param in params}
+
+    assert {"page", "per_page", "role", "q", "is_locked"} <= names
