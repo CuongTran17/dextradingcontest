@@ -90,9 +90,10 @@ def calculate_market_fill(
 
 
 class CryptoOrderService:
-    def __init__(self, repo, liquidity_provider):
+    def __init__(self, repo, liquidity_provider, now_provider=None):
         self.repo = repo
         self.liquidity_provider = liquidity_provider
+        self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def place_market_order(
         self,
@@ -128,6 +129,9 @@ class CryptoOrderService:
                 or participant_status != "active"
             ):
                 raise AccountUnavailableError("Trading account is not active")
+            contest = getattr(getattr(account, "participant", None), "contest", None)
+            if contest is not None and not self._contest_is_open_for_trading(contest):
+                raise AccountUnavailableError("Contest is not open for trading")
 
             market = self.repo.get_enabled_asset(contest_slug, symbol)
             if market is None:
@@ -135,6 +139,8 @@ class CryptoOrderService:
                     f"{symbol} is not enabled for this contest"
                 )
             asset, contest = market
+            if not self._contest_is_open_for_trading(contest):
+                raise AccountUnavailableError("Contest is not open for trading")
             if quantity < Decimal(asset.min_quantity):
                 raise ValueError(
                     f"Minimum quantity for {symbol} is {asset.min_quantity}"
@@ -200,6 +206,30 @@ class CryptoOrderService:
         except Exception:
             self.repo.rollback()
             raise
+
+    def _contest_is_open_for_trading(self, contest) -> bool:
+        if getattr(contest, "mode", None) == "practice":
+            return getattr(contest, "status", None) == "active"
+        if getattr(contest, "status", None) != "active":
+            return False
+
+        now = self._as_aware_utc(self.now_provider())
+        starts_at = self._as_aware_utc(getattr(contest, "starts_at", None))
+        ends_at = self._as_aware_utc(getattr(contest, "ends_at", None))
+
+        if starts_at is not None and now < starts_at:
+            return False
+        if ends_at is not None and now >= ends_at:
+            return False
+        return True
+
+    @staticmethod
+    def _as_aware_utc(value):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _apply_buy(
         self,

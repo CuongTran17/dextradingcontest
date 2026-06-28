@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getCryptoAccount } from '@/services/cryptoTradingApi'
 import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
+import { fetchContestLeaderboard, fetchContests } from '@/services/cryptoContestApi'
 import CryptoDashboard from '@/views/CryptoDashboard.vue'
 
 vi.mock('@/services/authApi', () => ({
@@ -17,6 +18,11 @@ vi.mock('@/services/cryptoMarketData', () => ({
   fetchLatestCryptoPrices: vi.fn(),
 }))
 
+vi.mock('@/services/cryptoContestApi', () => ({
+  fetchContestLeaderboard: vi.fn(),
+  fetchContests: vi.fn(),
+}))
+
 vi.mock('@/components/crypto/PortfolioSummary.vue', () => ({
   default: {
     props: ['account'],
@@ -25,7 +31,10 @@ vi.mock('@/components/crypto/PortfolioSummary.vue', () => ({
 }))
 
 vi.mock('@/components/crypto/LeaderboardTable.vue', () => ({
-  default: { template: '<div data-test="leaderboard"></div>' },
+  default: {
+    props: ['rows'],
+    template: '<div data-test="leaderboard">{{ rows.map((row) => row.user).join(",") }}</div>',
+  },
 }))
 
 describe('CryptoDashboard', () => {
@@ -50,6 +59,34 @@ describe('CryptoDashboard', () => {
       XRPUSDT: 1.04,
       BNBUSDT: 558,
     })
+    vi.mocked(fetchContests).mockReset()
+    vi.mocked(fetchContests).mockResolvedValue([
+      {
+        id: 'backend-cup',
+        title: 'Backend Cup',
+        status: 'active',
+        rawStatus: 'active',
+        mode: 'contest',
+        initialCapital: 15000,
+        symbols: ['BTCUSDT'],
+        startsAt: '2026-07-01T00:00:00+00:00',
+        endsAt: '2026-07-10T00:00:00+00:00',
+        participantCount: 7,
+      },
+    ])
+    vi.mocked(fetchContestLeaderboard).mockReset()
+    vi.mocked(fetchContestLeaderboard).mockResolvedValue([
+      {
+        rank: 1,
+        user: 'Backend Student',
+        equity: 15100,
+        pnl: 100,
+        roi: 0.66,
+        volume: 1000,
+        tradeCount: 2,
+        lastTrade: 'BTCUSDT buy',
+      },
+    ])
   })
 
   it('shows the backend account summary for a signed-in user', async () => {
@@ -79,5 +116,21 @@ describe('CryptoDashboard', () => {
     expect(fetchLatestCryptoPrices).toHaveBeenCalled()
     expect(wrapper.text()).toContain('$1,570.00')
     expect(wrapper.text()).not.toContain('$3,420.00')
+  })
+
+  it('loads active contests and leaderboard rows from the backend', async () => {
+    const wrapper = mount(CryptoDashboard, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(fetchContests).toHaveBeenCalled()
+    expect(fetchContestLeaderboard).toHaveBeenCalledWith('backend-cup')
+    expect(wrapper.text()).toContain('Backend Cup')
+    expect(wrapper.get('[data-test="leaderboard"]').text()).toContain('Backend Student')
   })
 })

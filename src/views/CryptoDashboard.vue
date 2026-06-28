@@ -61,13 +61,16 @@ import LeaderboardTable from '@/components/crypto/LeaderboardTable.vue'
 import PortfolioSummary from '@/components/crypto/PortfolioSummary.vue'
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { CRYPTO_ASSETS } from '@/constants/cryptoAssets'
-import { CRYPTO_CONTESTS, DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { isLoggedIn } from '@/services/authApi'
+import { fetchContestLeaderboard, fetchContests } from '@/services/cryptoContestApi'
 import { fetchLatestCryptoPrices } from '@/services/cryptoMarketData'
 import { getCryptoAccount } from '@/services/cryptoTradingApi'
-import type { CryptoSymbol, LeaderboardRow, TradingAccount } from '@/types/crypto'
+import type { Contest, CryptoSymbol, LeaderboardRow, TradingAccount } from '@/types/crypto'
 
 const account = ref<TradingAccount | null>(null)
+const contests = ref<Contest[]>([])
+const leaderboardRows = ref<LeaderboardRow[]>([])
 const assetPrices = ref<Record<CryptoSymbol, number>>({
   BTCUSDT: 0,
   ETHUSDT: 0,
@@ -81,37 +84,8 @@ const accountMessage = ref(
     : 'Sign in to view your persistent practice portfolio.',
 )
 
-const activeContests = computed(() =>
-  CRYPTO_CONTESTS.filter((contest) => contest.status === 'practice' || contest.status === 'active'),
-)
+const activeContests = computed(() => contests.value.filter((contest) => contest.status === 'practice' || contest.status === 'active'))
 const metrics = computed(() => accountMetrics(account.value))
-const leaderboardRows = computed<LeaderboardRow[]>(() => {
-  const rows: LeaderboardRow[] = [
-    {
-      rank: 1,
-      user: '0x7A...91F2',
-      equity: 11240,
-      pnl: 1240,
-      roi: 12.4,
-      volume: 48200,
-      tradeCount: 18,
-      lastTrade: 'BTCUSDT buy',
-    },
-  ]
-  if (account.value) {
-    rows.push({
-      rank: rows.length + 1,
-      user: 'Practice You',
-      equity: metrics.value.equity,
-      pnl: metrics.value.pnl,
-      roi: metrics.value.roi,
-      volume: metrics.value.volume,
-      tradeCount: metrics.value.tradeCount,
-      lastTrade: account.value.orders[0]?.symbol ?? 'No trades',
-    })
-  }
-  return rows
-})
 
 onMounted(async () => {
   const prices = await fetchLatestCryptoPrices(CRYPTO_ASSETS.map((asset) => asset.symbol))
@@ -120,6 +94,17 @@ onMounted(async () => {
     if (typeof price === 'number' && price > 0) {
       assetPrices.value[asset.symbol] = price
     }
+  }
+
+  try {
+    contests.value = await fetchContests()
+    const leaderboardContest = activeContests.value[0] ?? contests.value[0]
+    if (leaderboardContest) {
+      leaderboardRows.value = await fetchContestLeaderboard(leaderboardContest.id)
+    }
+  } catch {
+    contests.value = []
+    leaderboardRows.value = []
   }
 
   if (!isLoggedIn()) return

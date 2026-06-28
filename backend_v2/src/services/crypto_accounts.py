@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -11,12 +12,13 @@ class AccountNotFoundError(ValueError):
 
 
 class CryptoAccountService:
-    def __init__(self, repo):
+    def __init__(self, repo, now_provider=None):
         self.repo = repo
+        self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def join_contest(self, user_id: int, contest_slug: str) -> dict[str, Any]:
         contest = self.repo.get_active_contest(contest_slug)
-        if contest is None:
+        if contest is None or not self._contest_is_open_for_join(contest):
             raise ContestNotFoundError("Contest is not available")
 
         participant = self.repo.get_participant(contest.id, user_id)
@@ -33,6 +35,23 @@ class CryptoAccountService:
 
         self.repo.commit()
         return serialize_account(account, contest.slug)
+
+    def _contest_is_open_for_join(self, contest) -> bool:
+        if getattr(contest, "status", None) not in {"scheduled", "active"}:
+            return False
+
+        ends_at = self._as_aware_utc(getattr(contest, "ends_at", None))
+        if ends_at is not None and self._as_aware_utc(self.now_provider()) >= ends_at:
+            return False
+        return True
+
+    @staticmethod
+    def _as_aware_utc(value):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def get_account(self, user_id: int, contest_slug: str) -> dict[str, Any]:
         account = self.repo.get_account_for_user(contest_slug, user_id)
