@@ -163,9 +163,13 @@ export async function getAdminUsers(
   page = 1,
   perPage = 20,
   role?: string,
+  q?: string,
+  isLocked?: boolean,
 ): Promise<{ total: number; page: number; per_page: number; users: UserInfo[] }> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
   if (role) params.set('role', role)
+  if (q) params.set('q', q)
+  if (isLocked !== undefined) params.set('is_locked', String(isLocked))
   return authFetch(`/api/admin/users?${params}`)
 }
 

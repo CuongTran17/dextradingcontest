@@ -99,6 +99,105 @@ export interface AdminContestParticipant {
   lastTrade: string | null
 }
 
+export interface AdminOverview {
+  users: {
+    total: number
+    locked: number
+    admins: number
+  }
+  contests: {
+    total: number
+    active: number
+    participants: number
+  }
+  accounts: {
+    total: number
+    active: number
+    totalEquity: number
+  }
+}
+
+export interface AdminAccountUser {
+  id: number
+  email: string
+  fullname: string
+  role: 'user' | 'premium' | 'admin'
+  isLocked: boolean
+}
+
+export interface AdminAccountContest {
+  id: string
+  title: string
+  status: RawContestStatus
+}
+
+export interface AdminAccountSummary {
+  accountId: number
+  status: TradingAccountStatus
+  participantStatus: ParticipantStatus
+  user: AdminAccountUser
+  contest: AdminAccountContest
+  cash: number
+  lockedCash: number
+  initialEquity: number
+  equity: number
+  realizedPnl: number
+  unrealizedPnl: number
+  roi: number
+  positionCount: number
+  orderCount: number
+  updatedAt: string | null
+}
+
+export interface AdminAccountBalance {
+  asset: string
+  available: number
+  locked: number
+}
+
+export interface AdminAccountPosition {
+  symbol: CryptoSymbol
+  quantity: number
+  averageEntryPrice: number
+  costBasis: number
+  realizedPnl: number
+  updatedAt: string | null
+}
+
+export interface AdminAccountFill {
+  fillSequence: number
+  price: number
+  quantity: number
+  notional: number
+  feeAmount: number
+  feeAsset: string
+  executedAt: string | null
+}
+
+export interface AdminAccountOrder {
+  orderId: number
+  clientOrderId: string
+  symbol: CryptoSymbol
+  side: OrderSide
+  orderType: string
+  status: string
+  requestedQuantity: number
+  filledQuantity: number
+  averageFillPrice: number
+  executedNotional: number
+  feeAmount: number
+  feeAsset: string
+  submittedAt: string | null
+  completedAt: string | null
+  fills: AdminAccountFill[]
+}
+
+export interface AdminAccountDetail extends AdminAccountSummary {
+  balances: AdminAccountBalance[]
+  positions: AdminAccountPosition[]
+  orders: AdminAccountOrder[]
+}
+
 export interface ContestCreateInput {
   slug: string
   title: string

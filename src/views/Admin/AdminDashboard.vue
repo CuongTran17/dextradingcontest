@@ -85,11 +85,14 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import PageHeader from '@/components/layout/PageHeader.vue'
+import TabAccounts from './components/TabAccounts.vue'
 import TabContestParticipants from './components/TabContestParticipants.vue'
 import TabContestResults from './components/TabContestResults.vue'
 import TabContests from './components/TabContests.vue'
+import TabOverview from './components/TabOverview.vue'
+import TabUsers from './components/TabUsers.vue'
 
-type AdminTab = 'overview' | 'contests' | 'participants' | 'results'
+type AdminTab = 'overview' | 'users' | 'accounts' | 'contests' | 'participants' | 'results'
 
 const tabs: Array<{
   key: AdminTab
@@ -102,8 +105,22 @@ const tabs: Array<{
     key: 'overview',
     label: 'Overview',
     shortLabel: 'O',
-    description: 'Contest health, virtual volume, and simulator status.',
+    description: 'Users, contests, accounts, and system totals.',
     badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  },
+  {
+    key: 'users',
+    label: 'Users',
+    shortLabel: 'U',
+    description: 'Search users, roles, and lock status.',
+    badgeClass: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  },
+  {
+    key: 'accounts',
+    label: 'Accounts',
+    shortLabel: 'A',
+    description: 'Virtual balances, equity, positions, and orders.',
+    badgeClass: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300',
   },
   {
     key: 'contests',
@@ -138,15 +155,23 @@ watch(isSidebarCollapsed, (newVal) => {
 })
 
 const activeComponent = computed(() => {
+  if (activeTab.value === 'users') return TabUsers
+  if (activeTab.value === 'accounts') return TabAccounts
   if (activeTab.value === 'contests') return TabContests
   if (activeTab.value === 'participants') return TabContestParticipants
   if (activeTab.value === 'results') return TabContestResults
-  return TabContests
+  return TabOverview
 })
 const activeTabMeta = computed(() => tabs.find((tab) => tab.key === activeTab.value) || tabs[0])
 
 function resolveTab(value: unknown): AdminTab {
-  return value === 'contests' || value === 'participants' || value === 'results' ? value : 'overview'
+  return value === 'users'
+    || value === 'accounts'
+    || value === 'contests'
+    || value === 'participants'
+    || value === 'results'
+    ? value
+    : 'overview'
 }
 
 function setActiveTab(tab: AdminTab): void {
