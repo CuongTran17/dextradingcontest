@@ -298,6 +298,16 @@ class BinanceRealtimeService:
         self._client_symbols: dict[WebSocket, str | None] = {}
         self._tasks: list[asyncio.Task[Any]] = []
         self._stopping = asyncio.Event()
+        self._price_listeners: list[Callable[[dict[str, float]], Awaitable[None]]] = []
+
+    def register_price_listener(self, callback: Callable[[dict[str, float]], Awaitable[None]]) -> None:
+        """Đăng ký một async callback được gọi mỗi khi có ticker price update mới.
+
+        Callback nhận một dict[str, float] chứa giá hiện tại của tất cả symbols.
+        Nhiều callbacks có thể được đăng ký; tất cả được gọi song song qua asyncio.gather.
+        Lỗi từ một callback sẽ không ảnh hưởng đến các callbacks còn lại hay stream loop.
+        """
+        self._price_listeners.append(callback)
 
     async def start(self) -> None:
         if self._tasks:
@@ -380,7 +390,13 @@ class BinanceRealtimeService:
         if event_type == "24hrMiniTicker":
             ticker = normalize_ticker_event(payload)
             self.cache.update_price(ticker.symbol, ticker.price, ticker.event_time_ms)
-            await self._broadcast({"type": "prices", "prices": self.cache.get_prices(), "event_time": ticker.event_time_ms})
+            prices = self.cache.get_prices()
+            await self._broadcast({"type": "prices", "prices": prices, "event_time": ticker.event_time_ms})
+            if self._price_listeners:
+                await asyncio.gather(
+                    *[cb(prices) for cb in self._price_listeners],
+                    return_exceptions=True,
+                )
         elif event_type == "kline":
             candle = normalize_kline_event(payload)
             self.cache.update_price(candle.symbol, candle.close, candle.event_time_ms)

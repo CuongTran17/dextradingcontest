@@ -49,7 +49,7 @@
       </div>
     </section>
 
-    <PortfolioSummary v-if="account" :account="account" :metrics="metrics" />
+    <PortfolioSummary v-if="account" :account="account" :metrics="metrics" @cancel-order="handleCancelOrder" />
     <p v-else class="text-sm text-gray-500 dark:text-gray-400">
       {{ accountLoading ? 'Loading trading account...' : accountError }}
     </p>
@@ -75,6 +75,7 @@ import {
   subscribeCryptoRealtimeSymbol,
 } from '@/services/cryptoRealtime'
 import {
+  cancelCryptoOrder,
   getCryptoAccount,
   joinCryptoContest,
   placeCryptoMarketOrder,
@@ -170,7 +171,23 @@ const orderTicketDisabled = computed(
     account.value.status !== 'active',
 )
 
-async function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
+async function handleCancelOrder(orderId: string) {
+  try {
+    await cancelCryptoOrder(contestId.value, orderId)
+    account.value = await getCryptoAccount(contestId.value)
+  } catch (error) {
+    orderError.value = error instanceof Error ? error.message : 'Unable to cancel order'
+  }
+}
+
+async function submitOrder(order: {
+  side: 'buy' | 'sell'
+  quantity: number
+  orderType?: 'market' | 'limit'
+  limitPrice?: number
+  stopLossPrice?: number
+  takeProfitPrice?: number
+}) {
   if (!account.value || orderTicketDisabled.value || orderSubmitting.value) return
 
   orderError.value = ''
@@ -182,6 +199,10 @@ async function submitOrder(order: { side: 'buy' | 'sell'; quantity: number }) {
       symbol: currentSymbol.value,
       side: order.side,
       quantity: order.quantity,
+      orderType: order.orderType,
+      limitPrice: order.limitPrice,
+      stopLossPrice: order.stopLossPrice,
+      takeProfitPrice: order.takeProfitPrice,
     })
     account.value = await getCryptoAccount(contestId.value)
   } catch (error) {

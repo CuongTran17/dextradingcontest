@@ -28,16 +28,85 @@
       </div>
     </div>
 
-    <label class="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+    <!-- Order Type Selector: Market vs Limit -->
+    <div class="mt-4 flex rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+      <button
+        type="button"
+        class="flex-1 rounded-md py-1.5 text-xs font-semibold uppercase tracking-wider transition-all"
+        :class="orderType === 'market' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+        @click="orderType = 'market'"
+      >
+        Market
+      </button>
+      <button
+        type="button"
+        class="flex-1 rounded-md py-1.5 text-xs font-semibold uppercase tracking-wider transition-all"
+        :class="orderType === 'limit' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+        @click="orderType = 'limit'"
+      >
+        Limit
+      </button>
+    </div>
+
+    <!-- Quantity Field -->
+    <label class="mt-4 block text-sm font-medium text-gray-700 dark:text-gray-300">
       Quantity
       <input
         v-model.number="quantity"
         type="number"
         min="0"
         step="0.000001"
-        class="mt-2 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:text-white"
+        class="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:text-white"
       />
     </label>
+
+    <!-- Limit Price Field (when Limit order selected) -->
+    <label v-if="orderType === 'limit'" class="mt-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      Limit Price ($)
+      <input
+        v-model.number="limitPrice"
+        type="number"
+        min="0"
+        step="0.01"
+        class="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:text-white"
+        :placeholder="`Current: ${latestPrice}`"
+      />
+    </label>
+
+    <!-- TP/SL Expandable Toggle -->
+    <div class="mt-3">
+      <button
+        type="button"
+        class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+        @click="showTpSl = !showTpSl"
+      >
+        {{ showTpSl ? '− Hide TP / SL' : '+ Add Take-Profit / Stop-Loss' }}
+      </button>
+      <div v-if="showTpSl" class="mt-2 grid grid-cols-2 gap-3">
+        <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">
+          Take Profit ($)
+          <input
+            v-model.number="takeProfitPrice"
+            type="number"
+            min="0"
+            step="0.01"
+            class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-transparent px-2 text-xs text-gray-900 outline-none focus:border-emerald-500 dark:border-gray-700 dark:text-white"
+            placeholder="TP price"
+          />
+        </label>
+        <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">
+          Stop Loss ($)
+          <input
+            v-model.number="stopLossPrice"
+            type="number"
+            min="0"
+            step="0.01"
+            class="mt-1 h-9 w-full rounded-md border border-gray-300 bg-transparent px-2 text-xs text-gray-900 outline-none focus:border-rose-500 dark:border-gray-700 dark:text-white"
+            placeholder="SL price"
+          />
+        </label>
+      </div>
+    </div>
 
     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
       <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
@@ -47,16 +116,13 @@
         </dd>
       </div>
       <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
-        <dt class="text-gray-500 dark:text-gray-400">Fee</dt>
+        <dt class="text-gray-500 dark:text-gray-400">Fee (0.1%)</dt>
         <dd class="mt-1 font-semibold text-gray-900 dark:text-white">
           {{ formatCurrency(estimatedFee) }}
         </dd>
       </div>
     </dl>
 
-    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-      Simulated slippage estimate: {{ formatCurrency(estimatedSlippage) }}. Orders are virtual.
-    </p>
     <p v-if="error" class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
       {{ error }}
     </p>
@@ -67,15 +133,15 @@
     <button
       type="submit"
       class="mt-5 h-11 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-      :disabled="disabled || submitting || quantity <= 0"
+      :disabled="disabled || submitting || quantity <= 0 || (orderType === 'limit' && (!limitPrice || limitPrice <= 0))"
     >
-      {{ submitting ? 'Submitting...' : `Submit ${side === 'buy' ? 'Buy' : 'Sell'}` }}
+      {{ submitting ? 'Submitting...' : `Submit ${orderType === 'limit' ? 'Limit' : 'Market'} ${side === 'buy' ? 'Buy' : 'Sell'}` }}
     </button>
   </form>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { CryptoSymbol, OrderSide } from '@/types/crypto'
 
@@ -89,14 +155,35 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [order: { side: OrderSide; quantity: number }]
+  submit: [
+    order: {
+      side: OrderSide
+      quantity: number
+      orderType: 'market' | 'limit'
+      limitPrice?: number
+      stopLossPrice?: number
+      takeProfitPrice?: number
+    },
+  ]
 }>()
 
 const side = ref<OrderSide>('buy')
+const orderType = ref<'market' | 'limit'>('market')
 const quantity = ref(0.1)
-const estimatedNotional = computed(() => props.latestPrice * quantity.value)
+const limitPrice = ref<number | undefined>(undefined)
+const showTpSl = ref(false)
+const takeProfitPrice = ref<number | undefined>(undefined)
+const stopLossPrice = ref<number | undefined>(undefined)
+
+watch(() => props.latestPrice, (newPrice) => {
+  if (!limitPrice.value && newPrice > 0) {
+    limitPrice.value = newPrice
+  }
+}, { immediate: true })
+
+const effectivePrice = computed(() => (orderType.value === 'limit' && limitPrice.value ? limitPrice.value : props.latestPrice))
+const estimatedNotional = computed(() => effectivePrice.value * quantity.value)
 const estimatedFee = computed(() => estimatedNotional.value * 0.001)
-const estimatedSlippage = computed(() => estimatedNotional.value * 0.0005)
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -107,6 +194,13 @@ function formatCurrency(value: number): string {
 }
 
 function handleSubmit() {
-  emit('submit', { side: side.value, quantity: quantity.value })
+  emit('submit', {
+    side: side.value,
+    quantity: quantity.value,
+    orderType: orderType.value,
+    limitPrice: orderType.value === 'limit' ? limitPrice.value : undefined,
+    stopLossPrice: showTpSl.value ? stopLossPrice.value : undefined,
+    takeProfitPrice: showTpSl.value ? takeProfitPrice.value : undefined,
+  })
 }
 </script>

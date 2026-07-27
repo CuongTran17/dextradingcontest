@@ -12,6 +12,7 @@ from src.observability import RequestIdMiddleware
 from src.routes.crypto import router as crypto_router
 from src.routes.crypto_trading import router as crypto_trading_router
 from src.routes.health import router as health_router
+from src.routes.leaderboard import router as leaderboard_router
 from src.settings import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -39,3 +40,4 @@ app.include_router(admin_router)
 app.include_router(health_router)
 app.include_router(crypto_router)
 app.include_router(crypto_trading_router)
+app.include_router(leaderboard_router)

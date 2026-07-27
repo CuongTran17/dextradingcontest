@@ -32,6 +32,32 @@
             </span>
           </div>
         </div>
+
+        <div v-if="pendingOrders.length > 0" class="mt-4">
+          <h3 class="text-sm font-semibold text-amber-600 dark:text-amber-400">Pending Orders</h3>
+          <div class="mt-2 space-y-2">
+            <div
+              v-for="order in pendingOrders"
+              :key="order.id"
+              class="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm dark:border-amber-900/50 dark:bg-amber-950/20"
+            >
+              <div>
+                <span :class="order.side === 'buy' ? 'text-emerald-600' : 'text-rose-600'" class="font-semibold">
+                  {{ order.side.toUpperCase() }} {{ order.symbol }} (LIMIT @ {{ formatCurrency(order.limitPrice || 0) }})
+                </span>
+                <p class="text-xs text-gray-500">Qty: {{ order.quantity }}</p>
+              </div>
+              <button
+                type="button"
+                data-test="cancel-order-button"
+                @click="$emit('cancelOrder', order.id)"
+                class="rounded bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -45,9 +71,14 @@
             :key="order.id"
             class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-800"
           >
-            <span :class="order.side === 'buy' ? 'text-emerald-600' : 'text-rose-600'" class="font-semibold">
-              {{ order.side.toUpperCase() }} {{ order.symbol }}
-            </span>
+            <div class="flex items-center gap-2">
+              <span :class="order.side === 'buy' ? 'text-emerald-600' : 'text-rose-600'" class="font-semibold">
+                {{ order.side.toUpperCase() }} {{ order.symbol }}
+              </span>
+              <span class="rounded px-1.5 py-0.5 text-[10px] uppercase" :class="order.status === 'pending' ? 'bg-amber-100 text-amber-800' : order.status === 'cancelled' ? 'bg-gray-100 text-gray-600' : 'bg-emerald-100 text-emerald-800'">
+                {{ order.orderType === 'limit' ? `LIMIT (${order.status})` : order.status }}
+              </span>
+            </div>
             <span class="text-gray-500 dark:text-gray-400">{{ formatCurrency(order.notional) }}</span>
           </div>
         </div>
@@ -74,6 +105,11 @@ const props = defineProps<{
   }
 }>()
 
+defineEmits<{
+  cancelOrder: [orderId: string]
+}>()
+
+const pendingOrders = computed(() => props.account.orders.filter((order) => order.status === 'pending'))
 const recentOrders = computed(() => props.account.orders.slice(0, 5))
 const summaryItems = computed(() => [
   { label: 'Cash', value: formatCurrency(props.metrics.cash) },

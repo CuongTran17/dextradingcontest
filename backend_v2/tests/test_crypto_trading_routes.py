@@ -73,6 +73,14 @@ class FakeOrderService:
         self.arguments = arguments
         return ORDER
 
+    def place_order(self, **arguments):
+        self.arguments = arguments
+        return ORDER
+
+    def cancel_order(self, **arguments):
+        self.arguments = arguments
+        return ORDER
+
 
 class FakeContestService:
     def list_contests(self):
@@ -82,7 +90,7 @@ class FakeContestService:
         assert slug == "practice-arena"
         return CONTEST
 
-    def get_leaderboard(self, slug):
+    def get_leaderboard(self, slug, force_refresh=False):
         assert slug == "practice-arena"
         return [
             {
@@ -187,4 +195,8 @@ def test_market_order_does_not_pass_client_portfolio_to_service():
         "symbol": "ETHUSDT",
         "side": "buy",
         "quantity": 1,
+        "order_type": "market",
+        "limit_price": None,
+        "stop_loss_price": None,
+        "take_profit_price": None,
     }

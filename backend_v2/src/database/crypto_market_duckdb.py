@@ -517,6 +517,136 @@ class CryptoMarketDuckDB:
         self._upsert_indicator_rows(rows)
         return len(rows)
 
+    def materialize_rsi(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        period: int = 14,
+        source_limit: int | None = None,
+    ) -> int:
+        candles = self._load_indicator_source_candles(symbol, interval, limit=source_limit)
+        if not candles:
+            return 0
+
+        frame = pd.DataFrame(candles)
+        close = frame["close"].astype(float)
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = -delta.where(delta < 0, 0.0)
+
+        avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        rsi = rsi.fillna(50.0)
+
+        params_json = _indicator_params_json({"period": period})
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        rows = []
+        for index, row in frame.iterrows():
+            val = rsi.iloc[index]
+            if pd.isna(val) or index < period:
+                continue
+            rows.append((
+                "binance",
+                "spot",
+                symbol.upper(),
+                interval,
+                "RSI",
+                params_json,
+                _utc_naive(row["open_time"]),
+                json.dumps(
+                    {"value": float(val)},
+                    separators=(",", ":"),
+                ),
+                "derived-candles",
+                now,
+            ))
+        self._upsert_indicator_rows(rows)
+        return len(rows)
+
+    def materialize_ema(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        period: int = 9,
+        source_limit: int | None = None,
+    ) -> int:
+        candles = self._load_indicator_source_candles(symbol, interval, limit=source_limit)
+        if not candles:
+            return 0
+
+        frame = pd.DataFrame(candles)
+        close = frame["close"].astype(float)
+        ema = close.ewm(span=period, adjust=False).mean()
+
+        params_json = _indicator_params_json({"period": period})
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        rows = [
+            (
+                "binance",
+                "spot",
+                symbol.upper(),
+                interval,
+                "EMA",
+                params_json,
+                _utc_naive(row["open_time"]),
+                json.dumps(
+                    {"value": float(ema.iloc[index])},
+                    separators=(",", ":"),
+                ),
+                "derived-candles",
+                now,
+            )
+            for index, row in frame.iterrows()
+        ]
+        self._upsert_indicator_rows(rows)
+        return len(rows)
+
+    def materialize_sma(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        period: int = 20,
+        source_limit: int | None = None,
+    ) -> int:
+        candles = self._load_indicator_source_candles(symbol, interval, limit=source_limit)
+        if not candles:
+            return 0
+
+        frame = pd.DataFrame(candles)
+        close = frame["close"].astype(float)
+        sma = close.rolling(window=period).mean()
+
+        params_json = _indicator_params_json({"period": period})
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        rows = []
+        for index, row in frame.iterrows():
+            val = sma.iloc[index]
+            if pd.isna(val):
+                continue
+            rows.append((
+                "binance",
+                "spot",
+                symbol.upper(),
+                interval,
+                "SMA",
+                params_json,
+                _utc_naive(row["open_time"]),
+                json.dumps(
+                    {"value": float(val)},
+                    separators=(",", ":"),
+                ),
+                "derived-candles",
+                now,
+            ))
+        self._upsert_indicator_rows(rows)
+        return len(rows)
+
     def load_indicator(
         self,
         symbol: str,

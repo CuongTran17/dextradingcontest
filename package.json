@@ -13,6 +13,7 @@
     "type-check": "vue-tsc --build",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "test:backend": ".\\.venv\\Scripts\\python.exe -m pytest backend_v2\\tests -q",
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
     "deploy": "npm run build && gh-pages -d dist",

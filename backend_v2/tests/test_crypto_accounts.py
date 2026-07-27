@@ -24,6 +24,7 @@ class FakeRepository:
             title="Practice Arena",
             initial_balance=Decimal("10000"),
             quote_asset="USDT_TEST",
+            status="active",
         )
 
     def get_participant(self, contest_id, user_id):

@@ -20,11 +20,15 @@ interface BackendOrder {
   client_order_id: string
   symbol: SimulatedOrder['symbol']
   side: SimulatedOrder['side']
+  order_type?: string
   status: string
   filled_quantity: number
   average_fill_price: number
   executed_notional: number
   fee: number
+  limit_price?: number | null
+  stop_loss_price?: number | null
+  take_profit_price?: number | null
   created_at: string
 }
 
@@ -82,9 +86,24 @@ export async function placeCryptoMarketOrder(
       symbol: input.symbol,
       side: input.side,
       quantity: input.quantity,
+      order_type: input.orderType || 'market',
+      limit_price: input.limitPrice ?? null,
+      stop_loss_price: input.stopLossPrice ?? null,
+      take_profit_price: input.takeProfitPrice ?? null,
     }),
   })
   return mapOrder(order, input.contestId)
+}
+
+export async function cancelCryptoOrder(
+  contestId: string,
+  orderId: string,
+): Promise<SimulatedOrder> {
+  const order = await cryptoAuthFetch<BackendOrder>(
+    `/api/crypto/orders/${encodeURIComponent(orderId)}/cancel?contest_id=${encodeURIComponent(contestId)}`,
+    { method: 'POST' },
+  )
+  return mapOrder(order, contestId)
 }
 
 function mapAccount(account: BackendTradingAccount): TradingAccount {
@@ -112,6 +131,11 @@ function mapOrder(order: BackendOrder, contestId: string): SimulatedOrder {
     contestId,
     symbol: order.symbol,
     side: order.side,
+    orderType: (order.order_type as 'market' | 'limit') || 'market',
+    status: order.status,
+    limitPrice: order.limit_price ?? undefined,
+    stopLossPrice: order.stop_loss_price ?? undefined,
+    takeProfitPrice: order.take_profit_price ?? undefined,
     quantity: order.filled_quantity,
     executionPrice: order.average_fill_price,
     notional: order.executed_notional,

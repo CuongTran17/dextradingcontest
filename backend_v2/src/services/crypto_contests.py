@@ -1,4 +1,12 @@
-from datetime import datetime, timezone
+import time
+
+_LEADERBOARD_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_LEADERBOARD_CACHE_TTL = 15.0
+
+
+def clear_leaderboard_cache() -> None:
+    _LEADERBOARD_CACHE.clear()
+
 
 from src.database.crypto_models import Contest, ContestAsset
 from src.database.user_models import User
@@ -124,7 +132,13 @@ class CryptoContestService:
         self.repository.commit()
         return self._map_contest(contest)
 
-    def get_leaderboard(self, slug: str) -> list[dict]:
+    def get_leaderboard(self, slug: str, force_refresh: bool = False) -> list[dict]:
+        now = time.monotonic()
+        if not force_refresh and slug in _LEADERBOARD_CACHE:
+            cached_at, cached_rows = _LEADERBOARD_CACHE[slug]
+            if now - cached_at <= _LEADERBOARD_CACHE_TTL:
+                return [dict(row) for row in cached_rows]
+
         contest = self.repository.get_contest_by_slug(slug)
         if contest is None:
             raise ContestNotFoundError(f"Contest '{slug}' not found")
@@ -180,7 +194,8 @@ class CryptoContestService:
         rows.sort(key=lambda row: row["equity"], reverse=True)
         for index, row in enumerate(rows, start=1):
             row["rank"] = index
-        return rows
+        _LEADERBOARD_CACHE[slug] = (now, rows)
+        return [dict(row) for row in rows]
 
     def list_participants(self, slug: str) -> list[dict]:
         contest = self.repository.get_contest_by_slug(slug)

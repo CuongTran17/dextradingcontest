@@ -35,6 +35,7 @@ class FakeRepository:
             slug="practice-arena",
             quote_asset="USDT_TEST",
             fee_rate=Decimal("0.001"),
+            status="active",
         )
         self.asset = SimpleNamespace(
             id=2,

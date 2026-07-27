@@ -6,6 +6,7 @@ import type {
   ContestCreateInput,
   ContestUpdateInput,
   LeaderboardRow,
+  LeaderboardSortBy,
   ParticipantStatus,
 } from '@/types/crypto'
 
@@ -71,12 +72,36 @@ export async function fetchContest(contestId: string): Promise<Contest> {
   return mapContest(contest)
 }
 
-export async function fetchContestLeaderboard(contestId: string): Promise<LeaderboardRow[]> {
+export async function fetchContestLeaderboard(contestId: string, refresh = false): Promise<LeaderboardRow[]> {
+  const query = refresh ? '?refresh=true' : ''
   const rows = await backendFetch<BackendLeaderboardRow[]>(
     BACKEND_URL,
-    `/api/crypto/contests/${encodeURIComponent(contestId)}/leaderboard`,
+    `/api/crypto/contests/${encodeURIComponent(contestId)}/leaderboard${query}`,
   )
   return rows.map((row) => ({
+    rank: row.rank,
+    user: row.user,
+    equity: row.equity,
+    pnl: row.pnl,
+    roi: row.roi,
+    volume: row.volume,
+    tradeCount: row.trade_count,
+    lastTrade: row.last_trade,
+  }))
+}
+
+export async function fetchLeaderboardSnapshot(
+  contestId: string,
+  sortBy?: LeaderboardSortBy,
+): Promise<LeaderboardRow[]> {
+  const query = sortBy ? `?sort_by=${encodeURIComponent(sortBy)}` : ''
+  const response = await backendFetch<{
+    contest_id: string
+    sort_by: string
+    updated_at: string
+    rows: BackendLeaderboardRow[]
+  }>(BACKEND_URL, `/api/leaderboard/${encodeURIComponent(contestId)}${query}`)
+  return response.rows.map((row) => ({
     rank: row.rank,
     user: row.user,
     equity: row.equity,

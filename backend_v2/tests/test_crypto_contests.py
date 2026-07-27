@@ -385,3 +385,36 @@ def test_admin_can_lock_and_restore_participant_without_changing_equity(db_sessi
     assert locked["equity"] == 11000.0
     assert restored["status"] == "active"
     assert restored["account_status"] == "active"
+
+
+def test_leaderboard_caches_and_force_refreshes(db_session):
+    from src.services.crypto_contests import clear_leaderboard_cache
+    clear_leaderboard_cache()
+
+    _seed_participant_metrics(db_session)
+    call_count = 0
+
+    def mock_price_provider(symbols):
+        nonlocal call_count
+        call_count += 1
+        return {"BTCUSDT": 30000.0 if call_count == 1 else 50000.0}
+
+    service = CryptoContestService(
+        CryptoTradingRepository(db_session),
+        price_provider=mock_price_provider,
+    )
+
+    first_rows = service.get_leaderboard("practice-arena")
+    assert first_rows[0]["equity"] == 11000.0
+    assert call_count == 1
+
+    # Second call without force_refresh should hit cache and not call price_provider again
+    second_rows = service.get_leaderboard("practice-arena")
+    assert second_rows[0]["equity"] == 11000.0
+    assert call_count == 1
+
+    # Third call with force_refresh=True should bypass cache and fetch updated prices
+    third_rows = service.get_leaderboard("practice-arena", force_refresh=True)
+    assert third_rows[0]["equity"] == 13000.0  # 8000 + 0.1 * 50000 = 13000
+    assert call_count == 2
+

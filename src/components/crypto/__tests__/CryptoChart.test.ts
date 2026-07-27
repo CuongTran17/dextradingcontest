@@ -99,7 +99,7 @@ describe('CryptoChart', () => {
     await wrapper.get('[data-test="indicator-option-MACD"]').trigger('click')
     await flushPromises()
 
-    expect(fetchCryptoIndicator).toHaveBeenCalledWith('BTCUSDT', '1m', 'MACD', 120)
+    expect(fetchCryptoIndicator).toHaveBeenCalledWith('BTCUSDT', '1m', 'MACD', 1000)
     expect(chartMocks.createChart).toHaveBeenCalledTimes(2)
     expect(chartMocks.series.setData).toHaveBeenCalledWith([
       { time: 1, value: 0.2, color: '#10b981' },

@@ -129,14 +129,45 @@ def get_candles(
 def get_indicator(
     symbol: CryptoSymbol,
     timeframe: Literal["1m", "5m", "15m", "1h", "4h"] = "1m",
-    indicator: Literal["MACD"] = "MACD",
+    indicator: Literal["MACD", "RSI", "EMA", "SMA"] = "MACD",
     limit: int = Query(default=300, ge=1, le=1000),
 ) -> dict[str, Any]:
     try:
-        result = crypto_market_repo.load_indicator(symbol, timeframe, indicator, limit=limit)
+        normalized_indicator = indicator.upper()
+        params = None
+        if normalized_indicator == "MACD":
+            params = {"fast": 12, "slow": 26, "signal": 9}
+        elif normalized_indicator == "RSI":
+            params = {"period": 14}
+        elif normalized_indicator == "EMA":
+            params = {"period": 9}
+        elif normalized_indicator == "SMA":
+            params = {"period": 20}
+
+        if normalized_indicator == "MACD":
+            result = crypto_market_repo.load_indicator(symbol, timeframe, normalized_indicator, limit=limit)
+        else:
+            result = crypto_market_repo.load_indicator(
+                symbol, timeframe, normalized_indicator, limit=limit, params=params
+            )
+
         if not result["points"]:
-            crypto_market_repo.materialize_macd(symbol, timeframe, source_limit=max(limit + 200, 300))
-            result = crypto_market_repo.load_indicator(symbol, timeframe, indicator, limit=limit)
+            source_limit = max(limit + 200, 300)
+            if normalized_indicator == "MACD":
+                crypto_market_repo.materialize_macd(symbol, timeframe, source_limit=source_limit)
+            elif normalized_indicator == "RSI":
+                crypto_market_repo.materialize_rsi(symbol, timeframe, source_limit=source_limit)
+            elif normalized_indicator == "EMA":
+                crypto_market_repo.materialize_ema(symbol, timeframe, source_limit=source_limit)
+            elif normalized_indicator == "SMA":
+                crypto_market_repo.materialize_sma(symbol, timeframe, source_limit=source_limit)
+
+            if normalized_indicator == "MACD":
+                result = crypto_market_repo.load_indicator(symbol, timeframe, normalized_indicator, limit=limit)
+            else:
+                result = crypto_market_repo.load_indicator(
+                    symbol, timeframe, normalized_indicator, limit=limit, params=params
+                )
         return result
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Crypto indicator data is temporarily unavailable") from exc

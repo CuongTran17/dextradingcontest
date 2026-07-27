@@ -83,3 +83,23 @@ def test_invalid_side_is_rejected(side):
             BOOK,
             Decimal("0.001"),
         )
+
+
+def test_limit_order_requires_limit_price():
+    from unittest.mock import MagicMock
+    from src.services.crypto_execution import CryptoOrderService
+
+    mock_repo = MagicMock()
+    mock_repo.get_order_by_client_id.return_value = None
+    service = CryptoOrderService(mock_repo, MagicMock())
+    with pytest.raises(ValueError, match="limit_price is required for limit orders"):
+        service.place_order(
+            user_id=1,
+            contest_slug="practice-arena",
+            client_order_id="limit-001",
+            symbol="BTCUSDT",
+            side="buy",
+            quantity=Decimal("0.1"),
+            order_type="limit",
+            limit_price=None,
+        )

@@ -105,6 +105,30 @@ class CryptoOrderService:
         side: str,
         quantity: Decimal,
     ) -> dict:
+        return self.place_order(
+            user_id=user_id,
+            contest_slug=contest_slug,
+            client_order_id=client_order_id,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            order_type="market",
+        )
+
+    def place_order(
+        self,
+        *,
+        user_id: int,
+        contest_slug: str,
+        client_order_id: str,
+        symbol: str,
+        side: str,
+        quantity: Decimal,
+        order_type: str = "market",
+        limit_price: Decimal | None = None,
+        stop_loss_price: Decimal | None = None,
+        take_profit_price: Decimal | None = None,
+    ) -> dict:
         existing = self.repo.get_order_by_client_id(
             user_id,
             contest_slug,
@@ -112,6 +136,10 @@ class CryptoOrderService:
         )
         if existing is not None:
             return serialize_order(existing)
+
+        if order_type == "limit":
+            if limit_price is None or limit_price <= 0:
+                raise ValueError("limit_price is required for limit orders")
 
         try:
             account = self.repo.lock_account_for_user(
@@ -148,57 +176,87 @@ class CryptoOrderService:
 
             book = self.liquidity_provider.get_order_book(symbol, 100)
             fee_rate = Decimal(contest.fee_rate)
-            fill = calculate_market_fill(
-                side,
-                Decimal(quantity),
-                book,
-                fee_rate,
-            )
-            if fill.notional < Decimal(asset.min_notional):
-                raise ValueError(
-                    f"Minimum notional for {symbol} is {asset.min_notional}"
-                )
+            best_ask = Decimal(str(book["asks"][0]["price"])) if book.get("asks") else None
+            best_bid = Decimal(str(book["bids"][0]["price"])) if book.get("bids") else None
+            market_price = Decimal(str(book.get("mid_price", best_ask or Decimal("0"))))
 
-            cash = self.repo.lock_balance(
-                account.id,
-                contest.quote_asset,
+            # Determine if limit order can fill immediately or should be placed as pending
+            should_fill_immediately = (
+                order_type == "market"
+                or (order_type == "limit" and side == "buy" and best_ask is not None and limit_price >= best_ask)
+                or (order_type == "limit" and side == "sell" and best_bid is not None and limit_price <= best_bid)
             )
-            if cash is None:
-                raise InsufficientBalanceError(
-                    f"{contest.quote_asset} balance not found"
+
+            if should_fill_immediately:
+                fill = calculate_market_fill(
+                    side,
+                    Decimal(quantity),
+                    book,
+                    fee_rate,
                 )
+                if fill.notional < Decimal(asset.min_notional):
+                    raise ValueError(
+                        f"Minimum notional for {symbol} is {asset.min_notional}"
+                    )
+
+                cash = self.repo.lock_balance(account.id, contest.quote_asset)
+                if cash is None:
+                    raise InsufficientBalanceError(f"{contest.quote_asset} balance not found")
+                position = self.repo.lock_position(account.id, asset.id)
+
+                if side == "buy":
+                    position = self._apply_buy(account, cash, position, asset, fill)
+                else:
+                    self._apply_sell(account, cash, position, symbol, fill)
+
+                order = self._persist_order_and_fills(
+                    account=account,
+                    asset=asset,
+                    contest=contest,
+                    client_order_id=client_order_id,
+                    side=side,
+                    fill=fill,
+                    market_price=market_price,
+                    order_type=order_type,
+                    limit_price=limit_price,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price,
+                )
+                account.current_equity = Decimal(account.current_equity) - fill.fee
+                account.version = int(account.version) + 1
+                self.repo.commit()
+                return serialize_order(order)
+
+            # Pending Limit Order handling
+            estimated_notional = limit_price * Decimal(quantity)
+            if estimated_notional < Decimal(asset.min_notional):
+                raise ValueError(f"Minimum notional for {symbol} is {asset.min_notional}")
+
+            cash = self.repo.lock_balance(account.id, contest.quote_asset)
+            if cash is None:
+                raise InsufficientBalanceError(f"{contest.quote_asset} balance not found")
             position = self.repo.lock_position(account.id, asset.id)
 
             if side == "buy":
-                position = self._apply_buy(
-                    account,
-                    cash,
-                    position,
-                    asset,
-                    fill,
-                )
+                total_cost = estimated_notional * (Decimal("1") + fee_rate)
+                if Decimal(cash.available) < total_cost:
+                    raise InsufficientBalanceError("Insufficient USDT_TEST balance for limit order")
+                cash.available = Decimal(cash.available) - total_cost
             else:
-                self._apply_sell(
-                    account,
-                    cash,
-                    position,
-                    symbol,
-                    fill,
-                )
+                if position is None or Decimal(position.quantity) < quantity:
+                    raise InsufficientPositionError(f"Insufficient {symbol} position for limit order")
 
-            order = self._persist_order_and_fills(
+            order = self._persist_pending_limit_order(
                 account=account,
                 asset=asset,
                 contest=contest,
                 client_order_id=client_order_id,
                 side=side,
-                fill=fill,
-                market_price=Decimal(
-                    str(book.get("mid_price", fill.average_price))
-                ),
-            )
-            account.current_equity = (
-                Decimal(account.current_equity) - fill.fee
+                quantity=quantity,
+                market_price=market_price,
+                limit_price=limit_price,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
             )
             account.version = int(account.version) + 1
             self.repo.commit()
@@ -206,6 +264,29 @@ class CryptoOrderService:
         except Exception:
             self.repo.rollback()
             raise
+
+    def cancel_order(self, *, user_id: int, contest_slug: str, order_id: int) -> dict:
+        account = self.repo.lock_account_for_user(contest_slug, user_id)
+        if account is None or account.status != "active":
+            raise AccountUnavailableError("Trading account is not active")
+
+        order = next((o for o in account.orders if o.id == order_id), None)
+        if order is None:
+            raise ValueError("Order not found")
+        if order.status != "pending":
+            raise ValueError("Only pending orders can be cancelled")
+
+        if order.side == "buy" and order.limit_price:
+            fee_rate = Decimal("0.001")
+            locked_amount = Decimal(order.limit_price) * Decimal(order.requested_quantity) * (Decimal("1") + fee_rate)
+            cash = self.repo.lock_balance(account.id, order.fee_asset)
+            if cash is not None:
+                cash.available = Decimal(cash.available) + locked_amount
+
+        order.status = "cancelled"
+        order.completed_at = datetime.now(timezone.utc)
+        self.repo.commit()
+        return serialize_order(order)
 
     def _contest_is_open_for_trading(self, contest) -> bool:
         if getattr(contest, "mode", None) == "practice":
@@ -307,6 +388,10 @@ class CryptoOrderService:
         side: str,
         fill: MarketFill,
         market_price: Decimal,
+        order_type: str = "market",
+        limit_price: Decimal | None = None,
+        stop_loss_price: Decimal | None = None,
+        take_profit_price: Decimal | None = None,
     ) -> TradingOrder:
         completed_at = datetime.now(timezone.utc)
         order = TradingOrder(
@@ -315,7 +400,7 @@ class CryptoOrderService:
             asset_id=asset.id,
             asset=asset,
             side=side,
-            order_type="market",
+            order_type=order_type,
             status="filled",
             requested_quantity=fill.quantity,
             filled_quantity=fill.quantity,
@@ -324,6 +409,9 @@ class CryptoOrderService:
             executed_notional=fill.notional,
             fee_amount=fill.fee,
             fee_asset=contest.quote_asset,
+            limit_price=limit_price,
+            stop_loss_price=stop_loss_price,
+            take_profit_price=take_profit_price,
             market_price_at_submission=market_price,
             completed_at=completed_at,
         )
@@ -346,4 +434,42 @@ class CryptoOrderService:
                 )
             )
 
+        return order
+
+    def _persist_pending_limit_order(
+        self,
+        *,
+        account,
+        asset,
+        contest,
+        client_order_id: str,
+        side: str,
+        quantity: Decimal,
+        market_price: Decimal,
+        limit_price: Decimal,
+        stop_loss_price: Decimal | None = None,
+        take_profit_price: Decimal | None = None,
+    ) -> TradingOrder:
+        order = TradingOrder(
+            client_order_id=client_order_id,
+            account_id=account.id,
+            asset_id=asset.id,
+            asset=asset,
+            side=side,
+            order_type="limit",
+            status="pending",
+            requested_quantity=quantity,
+            filled_quantity=Decimal("0"),
+            average_fill_price=None,
+            estimated_notional=limit_price * quantity,
+            executed_notional=Decimal("0"),
+            fee_amount=Decimal("0"),
+            fee_asset=contest.quote_asset,
+            limit_price=limit_price,
+            stop_loss_price=stop_loss_price,
+            take_profit_price=take_profit_price,
+            market_price_at_submission=market_price,
+        )
+        self.repo.add_order(order)
+        self.repo.flush()
         return order

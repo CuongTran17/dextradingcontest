@@ -5,7 +5,7 @@ export type ParticipantStatus = 'active' | 'locked' | 'disqualified'
 export type TradingAccountStatus = 'active' | 'frozen' | 'closed'
 export type OrderSide = 'buy' | 'sell'
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D'
-export type CryptoIndicator = 'MACD'
+export type CryptoIndicator = 'MACD' | 'RSI' | 'EMA' | 'SMA'
 
 export interface Candle {
   time: number
@@ -34,23 +34,20 @@ export interface CryptoOrderBook {
   source: MarketDataSource
 }
 
-export interface MacdPoint {
+export interface IndicatorPoint {
   time: number
-  macd: number
-  signal: number
-  histogram: number
+  value?: number
+  macd?: number
+  signal?: number
+  histogram?: number
 }
 
 export interface CryptoIndicatorResponse {
   symbol: CryptoSymbol
   timeframe: Exclude<Timeframe, '1D'>
   indicator: CryptoIndicator
-  params: {
-    fast: number
-    slow: number
-    signal: number
-  }
-  points: MacdPoint[]
+  params: Record<string, number>
+  points: IndicatorPoint[]
 }
 
 export interface CryptoAsset {
@@ -75,6 +72,8 @@ export interface Contest {
   participantCount: number
 }
 
+export type LeaderboardSortBy = 'equity' | 'pnl' | 'roi'
+
 export interface LeaderboardRow {
   rank: number
   user: string
@@ -84,6 +83,26 @@ export interface LeaderboardRow {
   volume: number
   tradeCount: number
   lastTrade: string | null
+}
+
+export interface LeaderboardSnapshotMessage {
+  type: 'leaderboard_snapshot' | 'leaderboard_update'
+  contest_id: string
+  sort_by: LeaderboardSortBy
+  updated_at: string
+  rows: LeaderboardRow[]
+}
+
+export interface LeaderboardErrorMessage {
+  type: 'error'
+  message: string
+}
+
+export type LeaderboardWsMessage = LeaderboardSnapshotMessage | LeaderboardErrorMessage
+
+export interface LeaderboardClientMessage {
+  type: 'set_sort'
+  sort_by: LeaderboardSortBy
 }
 
 export interface AdminContestParticipant {
@@ -228,6 +247,11 @@ export interface SimulatedOrder {
   contestId: string
   symbol: CryptoSymbol
   side: OrderSide
+  orderType?: 'market' | 'limit'
+  status?: string
+  limitPrice?: number
+  stopLossPrice?: number
+  takeProfitPrice?: number
   quantity: number
   executionPrice: number
   notional: number
@@ -255,4 +279,8 @@ export interface MarketOrderInput {
   symbol: CryptoSymbol
   side: OrderSide
   quantity: number
+  orderType?: 'market' | 'limit'
+  limitPrice?: number
+  stopLossPrice?: number
+  takeProfitPrice?: number
 }

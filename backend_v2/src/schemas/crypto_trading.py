@@ -20,6 +20,10 @@ class MarketOrderCreate(BaseModel):
     symbol: CryptoSymbol
     side: Literal["buy", "sell"]
     quantity: Decimal = Field(gt=0)
+    order_type: Literal["market", "limit"] = "market"
+    limit_price: Decimal | None = Field(default=None, gt=0)
+    stop_loss_price: Decimal | None = Field(default=None, gt=0)
+    take_profit_price: Decimal | None = Field(default=None, gt=0)
 
 
 class ContestResponse(BaseModel):
@@ -91,11 +95,15 @@ class OrderResponse(BaseModel):
     client_order_id: str
     symbol: str
     side: str
+    order_type: str = "market"
     status: str
     filled_quantity: float
     average_fill_price: float
     executed_notional: float
     fee: float
+    limit_price: float | None = None
+    stop_loss_price: float | None = None
+    take_profit_price: float | None = None
     created_at: str
 
 
