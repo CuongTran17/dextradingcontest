@@ -18,6 +18,12 @@ from src.services.crypto_admin_dashboard import (
     AdminAccountNotFoundError,
     CryptoAdminDashboardService,
 )
+from src.services.crypto_settlement import (
+    ContestSettlementNotFoundError,
+    ContestSettlementValidationError,
+    CryptoSettlementService,
+    SettlementPriceUnavailableError,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 _require_admin = require_role("admin")
@@ -31,6 +37,12 @@ def get_crypto_admin_dashboard_service(
     db: Session = Depends(get_db),
 ) -> CryptoAdminDashboardService:
     return CryptoAdminDashboardService(CryptoTradingRepository(db))
+
+
+def get_crypto_settlement_service(
+    db: Session = Depends(get_db),
+) -> CryptoSettlementService:
+    return CryptoSettlementService(CryptoTradingRepository(db))
 
 
 @router.get("/users")
@@ -231,6 +243,55 @@ def admin_set_crypto_contest_status(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ContestValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/crypto/contests/{contest_id}/settle")
+def admin_settle_crypto_contest(
+    contest_id: str,
+    current_user: User = Depends(_require_admin),
+    service: CryptoSettlementService = Depends(get_crypto_settlement_service),
+):
+    try:
+        return service.settle_contest(contest_id, settled_by=current_user.id)
+    except ContestSettlementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SettlementPriceUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ContestSettlementValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/crypto/contests/{contest_id}/resettle")
+def admin_resettle_crypto_contest(
+    contest_id: str,
+    current_user: User = Depends(_require_admin),
+    service: CryptoSettlementService = Depends(get_crypto_settlement_service),
+):
+    try:
+        return service.settle_contest(
+            contest_id,
+            settled_by=current_user.id,
+            force=True,
+        )
+    except ContestSettlementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SettlementPriceUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ContestSettlementValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/crypto/contests/{contest_id}/settlement")
+def admin_get_crypto_contest_settlement(
+    contest_id: str,
+    current_user: User = Depends(_require_admin),
+    service: CryptoSettlementService = Depends(get_crypto_settlement_service),
+):
+    del current_user
+    try:
+        return service.get_latest_settlement(contest_id)
+    except ContestSettlementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/crypto/contests/{contest_id}/participants")

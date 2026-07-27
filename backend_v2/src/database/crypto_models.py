@@ -322,3 +322,62 @@ class TradeFill(Base):
         default="simulated_orderbook",
     )
     executed_at = Column(DateTime, nullable=False, default=_utcnow)
+
+
+class CryptoContestSettlement(Base):
+    __tablename__ = "crypto_contest_settlements"
+    __table_args__ = (
+        UniqueConstraint("contest_id", "version", name="uq_contest_settlement_version"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    contest_id = Column(
+        BigInteger,
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False)
+    snapshot_json = Column(Text, nullable=False)
+    snapshot_hash = Column(String(64), nullable=False)
+    settled_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    settled_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    contest = relationship("Contest")
+
+
+class CryptoAccountEvent(Base):
+    __tablename__ = "crypto_account_events"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    account_id = Column(
+        BigInteger,
+        ForeignKey("trading_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(64), nullable=False)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+
+class CryptoOrderEvent(Base):
+    __tablename__ = "crypto_order_events"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    order_id = Column(
+        BigInteger,
+        ForeignKey("crypto_orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    account_id = Column(
+        BigInteger,
+        ForeignKey("trading_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(64), nullable=False)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)

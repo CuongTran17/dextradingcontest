@@ -24,6 +24,9 @@ def test_admin_router_exposes_users_and_crypto_contests_only():
     assert "/api/admin/crypto/contests" in paths
     assert "/api/admin/crypto/contests/{contest_id}" in paths
     assert "/api/admin/crypto/contests/{contest_id}/status" in paths
+    assert "/api/admin/crypto/contests/{contest_id}/settle" in paths
+    assert "/api/admin/crypto/contests/{contest_id}/resettle" in paths
+    assert "/api/admin/crypto/contests/{contest_id}/settlement" in paths
     assert "/api/admin/crypto/contests/{contest_id}/participants" in paths
     assert "/api/admin/crypto/contests/{contest_id}/participants/{user_id}/status" in paths
     assert not any("/promotions" in path for path in paths)

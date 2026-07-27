@@ -8,7 +8,10 @@ from src.database.crypto_models import (
     Contest,
     ContestAsset,
     ContestParticipant,
+    CryptoAccountEvent,
     CryptoAsset,
+    CryptoContestSettlement,
+    CryptoOrderEvent,
     Position,
     TradeFill,
     TradingAccount,
@@ -44,6 +47,15 @@ class CryptoTradingRepository:
             self.db.query(Contest)
             .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
             .filter(Contest.slug == slug)
+            .first()
+        )
+
+    def get_contest_for_settlement(self, slug: str) -> Contest | None:
+        return (
+            self.db.query(Contest)
+            .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
+            .filter(Contest.slug == slug)
+            .with_for_update()
             .first()
         )
 
@@ -86,6 +98,23 @@ class CryptoTradingRepository:
             )
             .filter(Contest.slug == contest_slug)
             .all()
+        )
+
+    def list_settlements(self, contest_id: int) -> list[CryptoContestSettlement]:
+        return (
+            self.db.query(CryptoContestSettlement)
+            .filter(CryptoContestSettlement.contest_id == contest_id)
+            .order_by(CryptoContestSettlement.version.asc())
+            .all()
+        )
+
+    def get_latest_settlement(self, contest_slug: str) -> CryptoContestSettlement | None:
+        return (
+            self.db.query(CryptoContestSettlement)
+            .join(Contest, Contest.id == CryptoContestSettlement.contest_id)
+            .filter(Contest.slug == contest_slug)
+            .order_by(CryptoContestSettlement.version.desc())
+            .first()
         )
 
     def list_admin_accounts(
@@ -426,6 +455,21 @@ class CryptoTradingRepository:
     def add_fill(self, fill: TradeFill) -> TradeFill:
         self.db.add(fill)
         return fill
+
+    def add_settlement(
+        self,
+        settlement: CryptoContestSettlement,
+    ) -> CryptoContestSettlement:
+        self.db.add(settlement)
+        return settlement
+
+    def add_account_event(self, event: CryptoAccountEvent) -> CryptoAccountEvent:
+        self.db.add(event)
+        return event
+
+    def add_order_event(self, event: CryptoOrderEvent) -> CryptoOrderEvent:
+        self.db.add(event)
+        return event
 
     def flush(self) -> None:
         self.db.flush()

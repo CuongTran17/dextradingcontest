@@ -21,8 +21,9 @@ features have been removed from the runtime. Their frontend code is retained und
 - Admin participant moderation for active, locked, and disqualified contest accounts.
 - One isolated virtual account per user and contest.
 - Idempotent market orders executed against Binance order-book depth.
-- Limit orders that fill immediately when marketable or remain pending until cancelled.
-- Optional take-profit and stop-loss fields stored with submitted orders.
+- Limit orders that fill immediately when marketable or remain pending until cancelled or historically triggered.
+- Optional take-profit and stop-loss controls reconciled from historical candles on backend startup and while the backend is running.
+- Admin contest settlement with pending-order cancellation, mark-to-market final equity, final ranking, audit events, and snapshot hashes.
 - Dedicated DuckDB warehouse with a rolling year of `1m` Spot candles.
 - Materialized `5m`, `15m`, `1h`, and `4h` candles generated from canonical `1m` data.
 - Precomputed MACD, RSI, EMA, and SMA indicator data for chart overlays.
@@ -91,6 +92,9 @@ Set `MYSQL_URL`, `MYSQL_ASYNC_URL`, and a long random `JWT_SECRET` in
 `backend_v2\.env`. Keep the default DuckDB path unless the warehouse should live elsewhere.
 Market repair is enabled by default with `CRYPTO_REPAIR_ON_STARTUP=true`; it checks the
 existing DuckDB warehouse on backend startup and pulls only missing Binance `1m` ranges.
+Order reconciliation is enabled by default with `CRYPTO_PENDING_ORDER_RECONCILE_ON_STARTUP=true`
+and `CRYPTO_ORDER_RECONCILE_INTERVAL_SECONDS=30`; it checks pending limit orders and TP/SL
+controls after market repair catches up.
 
 ### 3. MySQL database
 
@@ -188,6 +192,9 @@ GET  /api/admin/crypto/contests
 POST /api/admin/crypto/contests
 PUT  /api/admin/crypto/contests/{contest_id}
 PUT  /api/admin/crypto/contests/{contest_id}/status
+POST /api/admin/crypto/contests/{contest_id}/settle
+POST /api/admin/crypto/contests/{contest_id}/resettle
+GET  /api/admin/crypto/contests/{contest_id}/settlement
 GET  /api/admin/crypto/contests/{contest_id}/participants
 PUT  /api/admin/crypto/contests/{contest_id}/participants/{user_id}/status?status=locked
 ```
@@ -205,6 +212,25 @@ PUT  /api/admin/crypto/contests/{contest_id}/participants/{user_id}/status?statu
 - Admins can list contest participants and set participant status to active, locked, or disqualified.
 - Locked or disqualified participants have their trading account frozen for that contest.
 
+### Contest Settlement
+
+- Settlement is admin-triggered from `/api/admin/crypto/contests/{contest_id}/settle`.
+- Re-running `settle` after completion returns the existing settlement snapshot.
+- `/resettle` creates a new settlement version and should be used only for controlled admin correction.
+- During settlement, all trading accounts are frozen and all pending orders are cancelled.
+- Pending buy orders release locked quote cash back to available cash.
+- Pending sell orders release locked position quantity back to the open position.
+- Open positions are not force-sold and no settlement sell order or extra fee is created.
+- Final equity is mark-to-market:
+
+```text
+final_equity = quote_cash_after_releasing_locks + sum(position_quantity * settlement_price)
+```
+
+- Settlement price is the close of the latest closed `1m` DuckDB candle at or before `contest.ends_at`.
+- If a settlement price is missing for any open position, settlement fails instead of guessing.
+- The stored settlement snapshot includes final rows, settlement prices, cancelled orders, version, and a deterministic SHA-256 hash for later smart contract or export workflows.
+
 ## Verification
 
 ```powershell
@@ -216,10 +242,9 @@ npm.cmd run build
 
 ## Roadmap
 
-1. Persisted leaderboard snapshots and scheduled final contest ranking updates.
-2. Automatic take-profit and stop-loss trigger processing for pending risk controls.
-3. Certificate/export workflow for finalized contest results.
-4. Binance Futures market data after the Spot workflow is stable.
+1. Certificate/export workflow for finalized contest results.
+2. Smart contract reward/claim integration using settlement snapshot hashes.
+3. Binance Futures market data after the Spot workflow is stable.
 
 ## Safety
 

@@ -243,6 +243,34 @@ class CryptoMarketDuckDB:
             for row in records
         ]
 
+    def latest_closed_price_at_or_before(
+        self,
+        symbol: str,
+        at: datetime,
+        *,
+        interval: str = "1m",
+    ) -> dict[str, float | int] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT open_time, close
+                FROM crypto_candles
+                WHERE exchange = 'binance' AND market_type = 'spot'
+                  AND symbol = ? AND interval = ? AND is_closed = TRUE
+                  AND open_time <= ?
+                ORDER BY open_time DESC
+                LIMIT 1
+                """,
+                [symbol.upper(), interval, _utc_naive(at)],
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "symbol": symbol.upper(),
+            "time": int(_utc_aware(row[0]).timestamp()),
+            "close": float(row[1]),
+        }
+
     def materialize_intervals(
         self,
         symbol: str,
