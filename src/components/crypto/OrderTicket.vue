@@ -80,7 +80,7 @@
         class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
         @click="showTpSl = !showTpSl"
       >
-        {{ showTpSl ? '− Hide TP / SL' : '+ Add Take-Profit / Stop-Loss' }}
+        {{ showTpSl ? '- Hide TP / SL' : '+ Add Take-Profit / Stop-Loss' }}
       </button>
       <div v-if="showTpSl" class="mt-2 grid grid-cols-2 gap-3">
         <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">

@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from src.database.crypto_models import (
@@ -281,6 +282,73 @@ class CryptoTradingRepository:
                 ContestParticipant.user_id == user_id,
                 TradingOrder.client_order_id == client_order_id,
             )
+            .first()
+        )
+
+    def list_pending_limit_orders(self) -> list[TradingOrder]:
+        return (
+            self.db.query(TradingOrder)
+            .join(TradingAccount)
+            .join(ContestParticipant)
+            .join(Contest)
+            .options(
+                selectinload(TradingOrder.account)
+                .selectinload(TradingAccount.participant)
+                .selectinload(ContestParticipant.contest),
+                selectinload(TradingOrder.asset),
+            )
+            .filter(
+                TradingOrder.order_type == "limit",
+                TradingOrder.status == "pending",
+                TradingOrder.limit_price.isnot(None),
+                TradingAccount.status == "active",
+                ContestParticipant.status == "active",
+                Contest.status == "active",
+            )
+            .order_by(TradingOrder.submitted_at.asc(), TradingOrder.id.asc())
+            .all()
+        )
+
+    def list_open_exit_trigger_orders(self) -> list[TradingOrder]:
+        return (
+            self.db.query(TradingOrder)
+            .join(TradingAccount)
+            .join(ContestParticipant)
+            .join(Contest)
+            .options(
+                selectinload(TradingOrder.account)
+                .selectinload(TradingAccount.participant)
+                .selectinload(ContestParticipant.contest),
+                selectinload(TradingOrder.asset),
+            )
+            .filter(
+                TradingOrder.side == "buy",
+                TradingOrder.status == "filled",
+                TradingOrder.filled_quantity > 0,
+                TradingOrder.exit_triggered_at.is_(None),
+                or_(
+                    TradingOrder.stop_loss_price.isnot(None),
+                    TradingOrder.take_profit_price.isnot(None),
+                ),
+                TradingAccount.status == "active",
+                ContestParticipant.status == "active",
+                Contest.status == "active",
+            )
+            .order_by(TradingOrder.completed_at.asc(), TradingOrder.id.asc())
+            .all()
+        )
+
+    def lock_order(self, order_id: int) -> TradingOrder | None:
+        return (
+            self.db.query(TradingOrder)
+            .options(
+                selectinload(TradingOrder.account)
+                .selectinload(TradingAccount.participant)
+                .selectinload(ContestParticipant.contest),
+                selectinload(TradingOrder.asset),
+            )
+            .filter(TradingOrder.id == order_id)
+            .with_for_update()
             .first()
         )
 

@@ -253,6 +253,7 @@ export interface SimulatedOrder {
   stopLossPrice?: number
   takeProfitPrice?: number
   quantity: number
+  filledQuantity?: number
   executionPrice: number
   notional: number
   fee: number

@@ -140,7 +140,7 @@ const tabs: Array<{
     key: 'results',
     label: 'Results',
     shortLabel: 'R',
-    description: 'Final ranks and Phase B certificate/NFT status.',
+    description: 'Current ranks from contest participant data.',
     badgeClass: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
   },
 ]

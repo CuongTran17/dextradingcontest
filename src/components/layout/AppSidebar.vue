@@ -84,6 +84,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useSidebar } from '@/composables/useSidebar'
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { DEFAULT_TRADE_PATH } from '@/constants/navigation'
 import {
   BarChartIcon,
@@ -108,7 +109,7 @@ const menuGroups = computed(() => {
         { icon: LayoutDashboardIcon, name: 'Dashboard', path: '/' },
         { icon: BarChartIcon, name: 'Trade Simulator', path: DEFAULT_TRADE_PATH },
         { icon: ListIcon, name: 'Contests', path: '/contests' },
-        { icon: LayoutDashboardIcon, name: 'Leaderboard', path: '/contests/practice-arena/leaderboard' },
+        { icon: LayoutDashboardIcon, name: 'Leaderboard', path: `/contests/${DEFAULT_CONTEST_ID}/leaderboard` },
         { icon: BoxCubeIcon, name: 'Virtual Portfolio', path: '/portfolio' },
       ],
     },

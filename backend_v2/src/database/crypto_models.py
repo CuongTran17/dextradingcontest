@@ -184,7 +184,11 @@ class TradingAccount(Base):
     participant = relationship("ContestParticipant", back_populates="account")
     balances = relationship("AccountBalance", cascade="all, delete-orphan")
     positions = relationship("Position", cascade="all, delete-orphan")
-    orders = relationship("TradingOrder", cascade="all, delete-orphan")
+    orders = relationship(
+        "TradingOrder",
+        back_populates="account",
+        cascade="all, delete-orphan",
+    )
 
 
 class AccountBalance(Base):
@@ -226,6 +230,7 @@ class Position(Base):
         index=True,
     )
     quantity = Column(Numeric(36, 18), nullable=False, default=0)
+    locked_quantity = Column(Numeric(36, 18), nullable=False, default=0)
     average_entry_price = Column(Numeric(36, 18), nullable=False, default=0)
     cost_basis = Column(Numeric(36, 18), nullable=False, default=0)
     realized_pnl = Column(Numeric(36, 18), nullable=False, default=0)
@@ -283,7 +288,11 @@ class TradingOrder(Base):
     market_price_at_submission = Column(Numeric(36, 18), nullable=False)
     submitted_at = Column(DateTime, nullable=False, default=_utcnow)
     completed_at = Column(DateTime, nullable=True)
+    exit_trigger_type = Column(String(32), nullable=True)
+    exit_triggered_at = Column(DateTime, nullable=True)
+    exit_order_id = Column(BigInteger, nullable=True)
 
+    account = relationship("TradingAccount", back_populates="orders")
     asset = relationship("CryptoAsset")
     fills = relationship("TradeFill", cascade="all, delete-orphan")
 

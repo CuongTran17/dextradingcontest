@@ -45,6 +45,8 @@ def test_settings_expose_only_crypto_runtime_configuration():
         "crypto_repair_on_startup",
         "crypto_repair_lookback_days",
         "crypto_repair_interval_seconds",
+        "crypto_pending_order_reconcile_on_startup",
+        "crypto_order_reconcile_interval_seconds",
     } <= fields
     assert "dnse_market_base_url" not in fields
     assert "kaggle_api_url" not in fields

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     crypto_repair_on_startup: bool = True
     crypto_repair_lookback_days: int = Field(default=365, ge=1, le=3650)
     crypto_repair_interval_seconds: int = Field(default=300, ge=60, le=24 * 60 * 60)
+    crypto_pending_order_reconcile_on_startup: bool = True
+    crypto_order_reconcile_interval_seconds: int = Field(default=30, ge=5, le=3600)
 
     @computed_field
     @property

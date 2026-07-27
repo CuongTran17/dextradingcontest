@@ -27,4 +27,3 @@ def test_metrics_calculate_equity_and_roi():
 
     assert metrics["equity"] > 10000
     assert metrics["roi"] > 0
-

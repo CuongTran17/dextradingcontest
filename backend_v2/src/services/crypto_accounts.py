@@ -122,6 +122,7 @@ def serialize_order(order) -> dict[str, Any]:
         "side": order.side,
         "order_type": getattr(order, "order_type", "market") or "market",
         "status": order.status,
+        "requested_quantity": float(order.requested_quantity),
         "filled_quantity": float(order.filled_quantity),
         "average_fill_price": average_fill_price,
         "executed_notional": float(order.executed_notional),
@@ -129,5 +130,12 @@ def serialize_order(order) -> dict[str, Any]:
         "limit_price": float(order.limit_price) if getattr(order, "limit_price", None) is not None else None,
         "stop_loss_price": float(order.stop_loss_price) if getattr(order, "stop_loss_price", None) is not None else None,
         "take_profit_price": float(order.take_profit_price) if getattr(order, "take_profit_price", None) is not None else None,
+        "exit_trigger_type": getattr(order, "exit_trigger_type", None),
+        "exit_triggered_at": (
+            order.exit_triggered_at.isoformat()
+            if getattr(order, "exit_triggered_at", None) is not None
+            else None
+        ),
+        "exit_order_id": getattr(order, "exit_order_id", None),
         "created_at": created_at,
     }

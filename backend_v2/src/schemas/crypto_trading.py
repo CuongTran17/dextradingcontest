@@ -97,6 +97,7 @@ class OrderResponse(BaseModel):
     side: str
     order_type: str = "market"
     status: str
+    requested_quantity: float
     filled_quantity: float
     average_fill_price: float
     executed_notional: float
@@ -104,6 +105,9 @@ class OrderResponse(BaseModel):
     limit_price: float | None = None
     stop_loss_price: float | None = None
     take_profit_price: float | None = None
+    exit_trigger_type: str | None = None
+    exit_triggered_at: str | None = None
+    exit_order_id: int | None = None
     created_at: str
 
 

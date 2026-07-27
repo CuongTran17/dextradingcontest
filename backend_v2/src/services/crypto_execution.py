@@ -179,6 +179,13 @@ class CryptoOrderService:
             best_ask = Decimal(str(book["asks"][0]["price"])) if book.get("asks") else None
             best_bid = Decimal(str(book["bids"][0]["price"])) if book.get("bids") else None
             market_price = Decimal(str(book.get("mid_price", best_ask or Decimal("0"))))
+            reference_price = limit_price if order_type == "limit" else market_price
+            self._validate_exit_controls(
+                side=side,
+                reference_price=Decimal(reference_price),
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+            )
 
             # Determine if limit order can fill immediately or should be placed as pending
             should_fill_immediately = (
@@ -242,9 +249,18 @@ class CryptoOrderService:
                 if Decimal(cash.available) < total_cost:
                     raise InsufficientBalanceError("Insufficient USDT_TEST balance for limit order")
                 cash.available = Decimal(cash.available) - total_cost
+                cash.locked = Decimal(cash.locked) + total_cost
             else:
-                if position is None or Decimal(position.quantity) < quantity:
+                if position is None:
                     raise InsufficientPositionError(f"Insufficient {symbol} position for limit order")
+                available_quantity = Decimal(position.quantity) - Decimal(
+                    getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+                )
+                if available_quantity < quantity:
+                    raise InsufficientPositionError(f"Insufficient {symbol} position for limit order")
+                position.locked_quantity = Decimal(
+                    getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+                ) + Decimal(quantity)
 
             order = self._persist_pending_limit_order(
                 account=account,
@@ -277,16 +293,189 @@ class CryptoOrderService:
             raise ValueError("Only pending orders can be cancelled")
 
         if order.side == "buy" and order.limit_price:
-            fee_rate = Decimal("0.001")
+            contest = getattr(getattr(account, "participant", None), "contest", None)
+            fee_rate = Decimal(getattr(contest, "fee_rate", Decimal("0.001")))
             locked_amount = Decimal(order.limit_price) * Decimal(order.requested_quantity) * (Decimal("1") + fee_rate)
             cash = self.repo.lock_balance(account.id, order.fee_asset)
             if cash is not None:
+                cash.locked = max(Decimal(cash.locked) - locked_amount, Decimal("0"))
                 cash.available = Decimal(cash.available) + locked_amount
+        elif order.side == "sell":
+            position = self.repo.lock_position(account.id, order.asset_id)
+            if position is not None:
+                locked_quantity = Decimal(
+                    getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+                )
+                position.locked_quantity = max(
+                    locked_quantity - Decimal(order.requested_quantity),
+                    Decimal("0"),
+                )
 
         order.status = "cancelled"
         order.completed_at = datetime.now(timezone.utc)
         self.repo.commit()
         return serialize_order(order)
+
+    def fill_pending_limit_order(
+        self,
+        *,
+        order_id: int,
+        fill_price: Decimal,
+        liquidity_source: str = "historical_candle",
+    ) -> dict:
+        if fill_price <= 0:
+            raise ValueError("fill_price must be greater than zero")
+
+        try:
+            order = self.repo.lock_order(order_id)
+            if order is None:
+                raise ValueError("Order not found")
+            if order.status != "pending" or order.order_type != "limit":
+                raise ValueError("Only pending limit orders can be filled")
+            if order.limit_price is None:
+                raise ValueError("Pending limit order is missing limit_price")
+
+            account = getattr(order, "_pending_account", None) or order.account
+            participant_status = getattr(
+                getattr(account, "participant", None),
+                "status",
+                None,
+            )
+            if (
+                account is None
+                or account.status != "active"
+                or participant_status != "active"
+            ):
+                raise AccountUnavailableError("Trading account is not active")
+            contest = getattr(getattr(account, "participant", None), "contest", None)
+            if contest is not None and not self._contest_is_open_for_trading(contest):
+                raise AccountUnavailableError("Contest is not open for trading")
+            if contest is None:
+                raise AccountUnavailableError("Contest is not available")
+
+            asset = order.asset
+            quantity = Decimal(order.requested_quantity)
+            fee_rate = Decimal(contest.fee_rate)
+            fill = self._build_single_price_fill(
+                quantity=quantity,
+                price=Decimal(fill_price),
+                fee_rate=fee_rate,
+            )
+            cash = self.repo.lock_balance(account.id, order.fee_asset)
+            if cash is None:
+                raise InsufficientBalanceError(f"{order.fee_asset} balance not found")
+            position = self.repo.lock_position(account.id, asset.id)
+
+            if order.side == "buy":
+                position = self._apply_pending_buy_fill(
+                    account,
+                    cash,
+                    position,
+                    asset,
+                    order,
+                    fill,
+                    fee_rate,
+                )
+            else:
+                self._apply_pending_sell_fill(
+                    account,
+                    cash,
+                    position,
+                    asset.symbol,
+                    fill,
+                )
+
+            self._complete_pending_order(
+                order=order,
+                contest=contest,
+                fill=fill,
+                liquidity_source=liquidity_source,
+            )
+            account.current_equity = Decimal(account.current_equity) - fill.fee
+            account.version = int(account.version) + 1
+            self.repo.commit()
+            return serialize_order(order)
+        except Exception:
+            self.repo.rollback()
+            raise
+
+    def fill_exit_trigger_order(
+        self,
+        *,
+        entry_order_id: int,
+        trigger_type: str,
+        trigger_price: Decimal,
+        liquidity_source: str = "historical_candle",
+    ) -> dict:
+        if trigger_type not in {"stop_loss", "take_profit"}:
+            raise ValueError("trigger_type must be stop_loss or take_profit")
+        if trigger_price <= 0:
+            raise ValueError("trigger_price must be greater than zero")
+
+        try:
+            entry_order = self.repo.lock_order(entry_order_id)
+            if entry_order is None:
+                raise ValueError("Entry order not found")
+            if entry_order.status != "filled" or entry_order.side != "buy":
+                raise ValueError("Only filled buy orders can trigger TP/SL exits")
+            if entry_order.exit_triggered_at is not None:
+                return serialize_order(entry_order)
+
+            account = getattr(entry_order, "_pending_account", None) or entry_order.account
+            if account is None or account.status != "active":
+                raise AccountUnavailableError("Trading account is not active")
+            contest = getattr(getattr(account, "participant", None), "contest", None)
+            if contest is None:
+                raise AccountUnavailableError("Contest is not available")
+            if not self._contest_is_open_for_trading(contest):
+                raise AccountUnavailableError("Contest is not open for trading")
+
+            asset = entry_order.asset
+            cash = self.repo.lock_balance(account.id, entry_order.fee_asset)
+            if cash is None:
+                raise InsufficientBalanceError(f"{entry_order.fee_asset} balance not found")
+            position = self.repo.lock_position(account.id, asset.id)
+            available_quantity = Decimal("0")
+            if position is not None:
+                available_quantity = Decimal(position.quantity) - Decimal(
+                    getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+                )
+
+            if available_quantity <= 0:
+                entry_order.exit_trigger_type = f"{trigger_type}_skipped"
+                entry_order.exit_triggered_at = datetime.now(timezone.utc)
+                self.repo.commit()
+                return serialize_order(entry_order)
+
+            quantity = min(Decimal(entry_order.filled_quantity), available_quantity)
+            fee_rate = Decimal(contest.fee_rate)
+            fill = self._build_single_price_fill(
+                quantity=quantity,
+                price=Decimal(trigger_price),
+                fee_rate=fee_rate,
+            )
+            self._apply_sell(account, cash, position, asset.symbol, fill)
+            exit_order = self._persist_order_and_fills(
+                account=account,
+                asset=asset,
+                contest=contest,
+                client_order_id=f"{trigger_type}-{entry_order.id}",
+                side="sell",
+                fill=fill,
+                market_price=Decimal(trigger_price),
+                order_type=trigger_type,
+                liquidity_source=liquidity_source,
+            )
+            entry_order.exit_trigger_type = trigger_type
+            entry_order.exit_triggered_at = datetime.now(timezone.utc)
+            entry_order.exit_order_id = exit_order.id
+            account.current_equity = Decimal(account.current_equity) - fill.fee
+            account.version = int(account.version) + 1
+            self.repo.commit()
+            return serialize_order(exit_order)
+        except Exception:
+            self.repo.rollback()
+            raise
 
     def _contest_is_open_for_trading(self, contest) -> bool:
         if getattr(contest, "mode", None) == "practice":
@@ -303,6 +492,23 @@ class CryptoOrderService:
         if ends_at is not None and now >= ends_at:
             return False
         return True
+
+    @staticmethod
+    def _validate_exit_controls(
+        *,
+        side: str,
+        reference_price: Decimal,
+        stop_loss_price: Decimal | None,
+        take_profit_price: Decimal | None,
+    ) -> None:
+        if stop_loss_price is None and take_profit_price is None:
+            return
+        if side != "buy":
+            raise ValueError("TP/SL controls are only supported for buy orders")
+        if stop_loss_price is not None and stop_loss_price >= reference_price:
+            raise ValueError("stop_loss_price must be below the entry price")
+        if take_profit_price is not None and take_profit_price <= reference_price:
+            raise ValueError("take_profit_price must be above the entry price")
 
     @staticmethod
     def _as_aware_utc(value):
@@ -324,7 +530,7 @@ class CryptoOrderService:
         if Decimal(cash.available) < total_cost:
             raise InsufficientBalanceError(
                 "Insufficient USDT_TEST balance"
-            )
+        )
 
         cash.available = Decimal(cash.available) - total_cost
         if position is None:
@@ -333,6 +539,7 @@ class CryptoOrderService:
                 asset_id=asset.id,
                 asset=asset,
                 quantity=Decimal("0"),
+                locked_quantity=Decimal("0"),
                 average_entry_price=Decimal("0"),
                 cost_basis=Decimal("0"),
                 realized_pnl=Decimal("0"),
@@ -347,6 +554,48 @@ class CryptoOrderService:
         position.average_entry_price = next_cost / next_quantity
         return position
 
+    def _apply_pending_buy_fill(
+        self,
+        account,
+        cash,
+        position,
+        asset,
+        order,
+        fill: MarketFill,
+        fee_rate: Decimal,
+    ):
+        locked_amount = (
+            Decimal(order.limit_price)
+            * Decimal(order.requested_quantity)
+            * (Decimal("1") + fee_rate)
+        )
+        if Decimal(cash.locked) < locked_amount:
+            raise InsufficientBalanceError(
+                "Insufficient locked USDT_TEST balance"
+            )
+
+        cash.locked = Decimal(cash.locked) - locked_amount
+        if position is None:
+            position = Position(
+                account_id=account.id,
+                asset_id=asset.id,
+                asset=asset,
+                quantity=Decimal("0"),
+                locked_quantity=Decimal("0"),
+                average_entry_price=Decimal("0"),
+                cost_basis=Decimal("0"),
+                realized_pnl=Decimal("0"),
+            )
+            self.repo.add_position(position)
+
+        previous_cost = Decimal(position.cost_basis)
+        next_quantity = Decimal(position.quantity) + fill.quantity
+        next_cost = previous_cost + fill.notional + fill.fee
+        position.quantity = next_quantity
+        position.cost_basis = next_cost
+        position.average_entry_price = next_cost / next_quantity
+        return position
+
     def _apply_sell(
         self,
         account,
@@ -355,7 +604,15 @@ class CryptoOrderService:
         symbol: str,
         fill: MarketFill,
     ) -> None:
-        if position is None or Decimal(position.quantity) < fill.quantity:
+        if position is None:
+            raise InsufficientPositionError(
+                f"Insufficient {symbol} position"
+            )
+        locked_quantity = Decimal(
+            getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+        )
+        available_quantity = Decimal(position.quantity) - locked_quantity
+        if available_quantity < fill.quantity:
             raise InsufficientPositionError(
                 f"Insufficient {symbol} position"
             )
@@ -378,6 +635,100 @@ class CryptoOrderService:
         if Decimal(position.quantity) == 0:
             self.repo.delete_position(position)
 
+    def _apply_pending_sell_fill(
+        self,
+        account,
+        cash,
+        position,
+        symbol: str,
+        fill: MarketFill,
+    ) -> None:
+        if position is None:
+            raise InsufficientPositionError(
+                f"Insufficient {symbol} position"
+            )
+        locked_quantity = Decimal(
+            getattr(position, "locked_quantity", Decimal("0")) or Decimal("0")
+        )
+        if locked_quantity < fill.quantity or Decimal(position.quantity) < fill.quantity:
+            raise InsufficientPositionError(
+                f"Insufficient locked {symbol} position"
+            )
+
+        net_proceeds = fill.notional - fill.fee
+        average_entry = Decimal(position.average_entry_price)
+        removed_cost = average_entry * fill.quantity
+        realized_pnl = net_proceeds - removed_cost
+
+        cash.available = Decimal(cash.available) + net_proceeds
+        position.locked_quantity = locked_quantity - fill.quantity
+        position.quantity = Decimal(position.quantity) - fill.quantity
+        position.realized_pnl = (
+            Decimal(position.realized_pnl) + realized_pnl
+        )
+        position.cost_basis = average_entry * Decimal(position.quantity)
+        account.realized_pnl = (
+            Decimal(account.realized_pnl) + realized_pnl
+        )
+
+        if Decimal(position.quantity) == 0:
+            self.repo.delete_position(position)
+
+    @staticmethod
+    def _build_single_price_fill(
+        *,
+        quantity: Decimal,
+        price: Decimal,
+        fee_rate: Decimal,
+    ) -> MarketFill:
+        notional = price * quantity
+        return MarketFill(
+            quantity=quantity,
+            notional=notional,
+            average_price=price,
+            fee=notional * fee_rate,
+            levels=(
+                FillLevel(
+                    price=price,
+                    quantity=quantity,
+                    notional=notional,
+                ),
+            ),
+        )
+
+    def _complete_pending_order(
+        self,
+        *,
+        order: TradingOrder,
+        contest,
+        fill: MarketFill,
+        liquidity_source: str,
+    ) -> None:
+        completed_at = datetime.now(timezone.utc)
+        order.status = "filled"
+        order.filled_quantity = fill.quantity
+        order.average_fill_price = fill.average_price
+        order.executed_notional = fill.notional
+        order.fee_amount = fill.fee
+        order.completed_at = completed_at
+        self.repo.flush()
+
+        fee_rate = Decimal(contest.fee_rate)
+        for sequence, level in enumerate(fill.levels, start=1):
+            self.repo.add_fill(
+                TradeFill(
+                    order_id=order.id,
+                    fill_sequence=sequence,
+                    price=level.price,
+                    quantity=level.quantity,
+                    notional=level.notional,
+                    fee_amount=level.notional * fee_rate,
+                    fee_asset=contest.quote_asset,
+                    liquidity_source=liquidity_source,
+                    executed_at=completed_at,
+                )
+            )
+
     def _persist_order_and_fills(
         self,
         *,
@@ -392,6 +743,7 @@ class CryptoOrderService:
         limit_price: Decimal | None = None,
         stop_loss_price: Decimal | None = None,
         take_profit_price: Decimal | None = None,
+        liquidity_source: str = "simulated_orderbook",
     ) -> TradingOrder:
         completed_at = datetime.now(timezone.utc)
         order = TradingOrder(
@@ -429,7 +781,7 @@ class CryptoOrderService:
                     notional=level.notional,
                     fee_amount=level.notional * fee_rate,
                     fee_asset=contest.quote_asset,
-                    liquidity_source="simulated_orderbook",
+                    liquidity_source=liquidity_source,
                     executed_at=completed_at,
                 )
             )

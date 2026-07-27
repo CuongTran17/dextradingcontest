@@ -88,9 +88,10 @@ import { useRoute } from 'vue-router'
 
 import LeaderboardTable from '@/components/crypto/LeaderboardTable.vue'
 import { useLeaderboardRealtime } from '@/composables/useLeaderboardRealtime'
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 
 const route = useRoute()
-const contestId = computed(() => String(route.params.contestId || 'practice-arena'))
+const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
 const isRefreshing = ref(false)
 
 const { rows, sortBy, status, lastUpdated, setSortBy, refresh } = useLeaderboardRealtime(contestId)

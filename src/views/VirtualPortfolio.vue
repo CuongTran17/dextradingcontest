@@ -73,7 +73,8 @@ const metrics = computed(() => {
 
 const equityPoints = computed(() => {
   if (!account.value) return []
-  const initial = account.value.initialEquity || 10000
+  const initial = account.value.initialEquity
+  if (initial <= 0) return []
   const points = [initial]
   let running = initial
   const filledOrders = account.value.orders.filter((o) => o.status === 'filled').slice().reverse()

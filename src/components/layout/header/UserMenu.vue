@@ -51,6 +51,7 @@ import { ChevronDownIcon, InfoCircleIcon, LogoutIcon, SettingsIcon, UserCircleIc
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { getSavedUser, isLoggedIn, logout as authLogout } from '@/services/authApi'
 
 const router = useRouter()
@@ -64,7 +65,7 @@ const avatarSrc = computed(() => currentUser.value?.avatar_data || '/images/user
 const menuItems = [
   { href: '/portfolio', icon: UserCircleIcon, text: 'Virtual Portfolio' },
   { href: '/contests', icon: SettingsIcon, text: 'Contests' },
-  { href: '/contests/practice-arena/leaderboard', icon: InfoCircleIcon, text: 'Leaderboard' },
+  { href: `/contests/${DEFAULT_CONTEST_ID}/leaderboard`, icon: InfoCircleIcon, text: 'Leaderboard' },
 ]
 
 function toggleDropdown() {

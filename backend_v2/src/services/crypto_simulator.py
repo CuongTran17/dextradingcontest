@@ -7,7 +7,6 @@ from uuid import uuid4
 
 FEE_RATE = 0.001
 SLIPPAGE_RATE = 0.0005
-INITIAL_CAPITAL = 10000.0
 
 
 def execute_market_order(
@@ -25,7 +24,8 @@ def execute_market_order(
     next_portfolio = deepcopy(portfolio)
     next_portfolio.setdefault("positions", [])
     next_portfolio.setdefault("orders", [])
-    next_portfolio.setdefault("cash", INITIAL_CAPITAL)
+    next_portfolio.setdefault("cash", 0.0)
+    next_portfolio.setdefault("initial_equity", _starting_equity(next_portfolio))
 
     execution_price = float(latest_price)
     notional = execution_price * quantity
@@ -36,7 +36,7 @@ def execute_market_order(
     if side == "buy":
         total_cost = notional + fee
         if next_portfolio["cash"] < total_cost:
-            raise ValueError("Insufficient USDT_TEST balance")
+            raise ValueError("Insufficient balance")
         next_portfolio["cash"] -= total_cost
         position = _find_position(positions, symbol)
         if position:
@@ -53,21 +53,22 @@ def execute_market_order(
         next_portfolio["cash"] += notional - fee
         position["quantity"] -= quantity
 
+    order = {
+        "id": str(uuid4()),
+        "symbol": symbol,
+        "side": side,
+        "quantity": quantity,
+        "execution_price": execution_price,
+        "notional": notional,
+        "fee": fee,
+        "slippage": slippage,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if next_portfolio.get("contest_id"):
+        order["contest_id"] = next_portfolio["contest_id"]
+
     next_portfolio["positions"] = [position for position in positions if position["quantity"] > 1e-12]
-    next_portfolio["orders"].append(
-        {
-            "id": str(uuid4()),
-            "contest_id": next_portfolio.get("contest_id", "practice-arena"),
-            "symbol": symbol,
-            "side": side,
-            "quantity": quantity,
-            "execution_price": execution_price,
-            "notional": notional,
-            "fee": fee,
-            "slippage": slippage,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    next_portfolio["orders"].append(order)
     return next_portfolio
 
 
@@ -80,17 +81,28 @@ def portfolio_metrics(
         for position in portfolio.get("positions", [])
     )
     equity = portfolio.get("cash", 0.0) + positions_value
-    pnl = equity - INITIAL_CAPITAL
+    initial_equity = _starting_equity(portfolio)
+    pnl = equity - initial_equity
     volume = sum(order.get("notional", 0.0) for order in portfolio.get("orders", []))
     return {
         "cash": portfolio.get("cash", 0.0),
         "positions_value": positions_value,
         "equity": equity,
         "pnl": pnl,
-        "roi": (pnl / INITIAL_CAPITAL) * 100,
+        "roi": (pnl / initial_equity) * 100 if initial_equity > 0 else 0.0,
         "volume": volume,
         "trade_count": len(portfolio.get("orders", [])),
     }
+
+
+def _starting_equity(portfolio: dict[str, Any]) -> float:
+    if "initial_equity" in portfolio:
+        return float(portfolio["initial_equity"])
+    positions_value = sum(
+        float(position.get("quantity", 0.0)) * float(position.get("average_entry", 0.0))
+        for position in portfolio.get("positions", [])
+    )
+    return float(portfolio.get("cash", 0.0)) + positions_value
 
 
 def _find_position(positions: list[dict[str, Any]], symbol: str) -> dict[str, Any] | None:

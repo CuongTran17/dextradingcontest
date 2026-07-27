@@ -66,6 +66,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
+import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { fetchContest } from '@/services/cryptoContestApi'
 import { joinCryptoContest } from '@/services/cryptoTradingApi'
 import type { Contest } from '@/types/crypto'
@@ -77,7 +78,7 @@ const loadError = ref('')
 const joining = ref(false)
 const joined = ref(false)
 const joinError = ref('')
-const contestId = computed(() => String(route.params.contestId || 'practice-arena'))
+const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
 
 onMounted(async () => {
   try {

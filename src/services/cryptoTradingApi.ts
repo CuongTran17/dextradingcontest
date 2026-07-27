@@ -22,6 +22,7 @@ interface BackendOrder {
   side: SimulatedOrder['side']
   order_type?: string
   status: string
+  requested_quantity?: number
   filled_quantity: number
   average_fill_price: number
   executed_notional: number
@@ -136,7 +137,8 @@ function mapOrder(order: BackendOrder, contestId: string): SimulatedOrder {
     limitPrice: order.limit_price ?? undefined,
     stopLossPrice: order.stop_loss_price ?? undefined,
     takeProfitPrice: order.take_profit_price ?? undefined,
-    quantity: order.filled_quantity,
+    quantity: order.requested_quantity ?? order.filled_quantity,
+    filledQuantity: order.filled_quantity,
     executionPrice: order.average_fill_price,
     notional: order.executed_notional,
     fee: order.fee,

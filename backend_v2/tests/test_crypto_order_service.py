@@ -46,11 +46,12 @@ class FakeRepository:
         self.account = SimpleNamespace(
             id=3,
             status="active",
-            participant=SimpleNamespace(status="active"),
+            participant=SimpleNamespace(status="active", contest=self.contest),
             current_equity=Decimal("10000"),
             realized_pnl=Decimal("0"),
             unrealized_pnl=Decimal("0"),
             version=1,
+            orders=[],
         )
         self.balance = SimpleNamespace(
             available=Decimal("10000"),
@@ -83,6 +84,12 @@ class FakeRepository:
     def lock_position(self, account_id, asset_id):
         return self.position
 
+    def lock_order(self, order_id):
+        return next(
+            (order for order in self.orders.values() if order.id == order_id),
+            None,
+        )
+
     def add_position(self, position):
         self.position = position
         return position
@@ -93,8 +100,10 @@ class FakeRepository:
     def add_order(self, order):
         order.id = len(self.orders) + 1
         order.asset = self.asset
+        order._pending_account = self.account
         order.submitted_at = datetime.now(timezone.utc)
         self.orders[order.client_order_id] = order
+        self.account.orders.append(order)
         return order
 
     def add_fill(self, fill):
@@ -180,3 +189,224 @@ def test_sell_rejects_when_position_is_too_small():
 
     assert repo.rollback_count == 1
     assert repo.balance.available == Decimal("10000")
+
+
+def test_pending_limit_buy_moves_cash_to_locked_until_cancelled():
+    service, repo = _service()
+
+    order = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="limit-buy-001",
+        symbol="BTCUSDT",
+        side="buy",
+        quantity=Decimal("0.02"),
+        order_type="limit",
+        limit_price=Decimal("90000"),
+    )
+
+    assert order["status"] == "pending"
+    assert order["requested_quantity"] == 0.02
+    assert repo.balance.available == Decimal("8198.20000")
+    assert repo.balance.locked == Decimal("1801.80000")
+
+    cancelled = service.cancel_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        order_id=order["order_id"],
+    )
+
+    assert cancelled["status"] == "cancelled"
+    assert repo.balance.available == Decimal("10000.00000")
+    assert repo.balance.locked == Decimal("0.00000")
+
+
+def test_pending_limit_sell_locks_position_quantity():
+    service, repo = _service()
+    repo.position = SimpleNamespace(
+        asset_id=2,
+        quantity=Decimal("0.02"),
+        locked_quantity=Decimal("0"),
+        average_entry_price=Decimal("90000"),
+        cost_basis=Decimal("1800"),
+        realized_pnl=Decimal("0"),
+    )
+
+    order = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="limit-sell-001",
+        symbol="BTCUSDT",
+        side="sell",
+        quantity=Decimal("0.015"),
+        order_type="limit",
+        limit_price=Decimal("120000"),
+    )
+
+    assert order["status"] == "pending"
+    assert repo.position.locked_quantity == Decimal("0.015")
+
+    with pytest.raises(
+        InsufficientPositionError,
+        match="Insufficient BTCUSDT position",
+    ):
+        service.place_order(
+            user_id=3,
+            contest_slug="practice-arena",
+            client_order_id="limit-sell-002",
+            symbol="BTCUSDT",
+            side="sell",
+            quantity=Decimal("0.01"),
+            order_type="limit",
+            limit_price=Decimal("121000"),
+        )
+
+
+def test_cancel_pending_limit_sell_releases_position_quantity():
+    service, repo = _service()
+    repo.position = SimpleNamespace(
+        asset_id=2,
+        quantity=Decimal("0.02"),
+        locked_quantity=Decimal("0"),
+        average_entry_price=Decimal("90000"),
+        cost_basis=Decimal("1800"),
+        realized_pnl=Decimal("0"),
+    )
+
+    order = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="limit-sell-003",
+        symbol="BTCUSDT",
+        side="sell",
+        quantity=Decimal("0.015"),
+        order_type="limit",
+        limit_price=Decimal("120000"),
+    )
+    service.cancel_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        order_id=order["order_id"],
+    )
+
+    assert repo.position.locked_quantity == Decimal("0.000")
+
+
+def test_fill_pending_limit_buy_uses_locked_cash_and_creates_fill():
+    service, repo = _service()
+    order = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="limit-buy-fill-001",
+        symbol="BTCUSDT",
+        side="buy",
+        quantity=Decimal("0.02"),
+        order_type="limit",
+        limit_price=Decimal("90000"),
+    )
+
+    filled = service.fill_pending_limit_order(
+        order_id=order["order_id"],
+        fill_price=Decimal("90000"),
+    )
+
+    assert filled["status"] == "filled"
+    assert repo.balance.available == Decimal("8198.20000")
+    assert repo.balance.locked == Decimal("0.00000")
+    assert repo.position.quantity == Decimal("0.02")
+    assert repo.position.average_entry_price == Decimal("90090.000")
+    assert repo.saved_fills[-1].liquidity_source == "historical_candle"
+
+
+def test_fill_pending_limit_sell_releases_locked_position_quantity():
+    service, repo = _service()
+    repo.position = SimpleNamespace(
+        asset_id=2,
+        quantity=Decimal("0.02"),
+        locked_quantity=Decimal("0"),
+        average_entry_price=Decimal("90000"),
+        cost_basis=Decimal("1800"),
+        realized_pnl=Decimal("0"),
+    )
+    order = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="limit-sell-fill-001",
+        symbol="BTCUSDT",
+        side="sell",
+        quantity=Decimal("0.015"),
+        order_type="limit",
+        limit_price=Decimal("120000"),
+    )
+
+    filled = service.fill_pending_limit_order(
+        order_id=order["order_id"],
+        fill_price=Decimal("120000"),
+    )
+
+    assert filled["status"] == "filled"
+    assert repo.position.quantity == Decimal("0.005")
+    assert repo.position.locked_quantity == Decimal("0.000")
+    assert repo.balance.available == Decimal("11798.200000")
+    assert repo.account.realized_pnl == Decimal("448.200000")
+
+
+def test_fill_stop_loss_exit_creates_sell_order_and_marks_entry_triggered():
+    service, repo = _service()
+    entry = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="entry-with-sl-001",
+        symbol="BTCUSDT",
+        side="buy",
+        quantity=Decimal("0.02"),
+        order_type="market",
+        stop_loss_price=Decimal("90000"),
+    )
+
+    exit_order = service.fill_exit_trigger_order(
+        entry_order_id=entry["order_id"],
+        trigger_type="stop_loss",
+        trigger_price=Decimal("90000"),
+    )
+    entry_order = repo.lock_order(entry["order_id"])
+
+    assert exit_order["side"] == "sell"
+    assert exit_order["order_type"] == "stop_loss"
+    assert exit_order["status"] == "filled"
+    assert entry_order.exit_trigger_type == "stop_loss"
+    assert entry_order.exit_order_id == exit_order["order_id"]
+    assert repo.position is None
+    assert repo.saved_fills[-1].liquidity_source == "historical_candle"
+
+
+def test_fill_take_profit_exit_only_sells_available_quantity_once():
+    service, repo = _service()
+    entry = service.place_order(
+        user_id=3,
+        contest_slug="practice-arena",
+        client_order_id="entry-with-tp-001",
+        symbol="BTCUSDT",
+        side="buy",
+        quantity=Decimal("0.02"),
+        order_type="market",
+        take_profit_price=Decimal("120000"),
+    )
+    repo.position.locked_quantity = Decimal("0.005")
+
+    exit_order = service.fill_exit_trigger_order(
+        entry_order_id=entry["order_id"],
+        trigger_type="take_profit",
+        trigger_price=Decimal("120000"),
+    )
+    repeated = service.fill_exit_trigger_order(
+        entry_order_id=entry["order_id"],
+        trigger_type="take_profit",
+        trigger_price=Decimal("120000"),
+    )
+
+    assert exit_order["order_type"] == "take_profit"
+    assert exit_order["filled_quantity"] == 0.015
+    assert repeated["order_id"] == entry["order_id"]
+    assert repo.position.quantity == Decimal("0.005")
+    assert repo.position.locked_quantity == Decimal("0.005")

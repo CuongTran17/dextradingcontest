@@ -1,6 +1,6 @@
 # Educational Crypto DEX Trading Contest
 
-This project is an educational crypto trading contest simulator. Users receive virtual USDT_TEST, analyze crypto charts, place simulated market buy/sell orders, and compete on public leaderboards.
+This project is an educational crypto trading contest simulator. Users receive virtual USDT_TEST, analyze crypto charts, place simulated market and limit buy/sell orders, and compete on public leaderboards.
 
 All balances, positions, trades, PnL, ROI, contest rewards, and leaderboard results are simulated. They have no real-money value. The app does not provide investment advice, exchange trading execution, deposits, withdrawals, or mainnet swaps.
 
@@ -12,16 +12,20 @@ features have been removed from the runtime. Their frontend code is retained und
 
 - Vue 3, TypeScript, Vite, Tailwind CSS frontend.
 - FastAPI backend with authenticated virtual trading APIs.
-- Binance Spot prices, candles, and order-book snapshots.
+- Binance Spot prices, candles, order-book snapshots, and WebSocket realtime updates.
 - BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, and BNBUSDT.
 - MySQL-backed contest participants, accounts, balances, positions, orders, and fills.
 - MySQL-backed public contest list/detail pages and live-equity leaderboards.
+- Public leaderboard REST snapshots and WebSocket broadcasts with polling fallback.
 - Admin contest creation and status management without editing user results.
 - Admin participant moderation for active, locked, and disqualified contest accounts.
 - One isolated virtual account per user and contest.
 - Idempotent market orders executed against Binance order-book depth.
+- Limit orders that fill immediately when marketable or remain pending until cancelled.
+- Optional take-profit and stop-loss fields stored with submitted orders.
 - Dedicated DuckDB warehouse with a rolling year of `1m` Spot candles.
 - Materialized `5m`, `15m`, `1h`, and `4h` candles generated from canonical `1m` data.
+- Precomputed MACD, RSI, EMA, and SMA indicator data for chart overlays.
 - Resumable Binance backfill with checkpointing, gap detection, and gap repair.
 
 Portfolio and order state is authoritative in MySQL. Browser `localStorage` is not used for
@@ -31,11 +35,11 @@ balances, positions, or trading history.
 
 | Component | Responsibility |
 | --- | --- |
-| Vue frontend | Charts, order book, simulated trading, portfolio, and contest views |
-| FastAPI backend | Authentication, market APIs, order execution, and account APIs |
+| Vue frontend | Charts, order book, realtime trading UI, portfolio, contest, leaderboard, and admin views |
+| FastAPI backend | Authentication, market APIs, realtime WebSockets, order execution, leaderboard, and account APIs |
 | MySQL | Users, contests, accounts, balances, positions, orders, and fills |
 | DuckDB | Historical Binance Spot candles and ingestion checkpoints |
-| Binance REST API | Latest prices, order-book depth, fallback candles, and historical backfill |
+| Binance REST/WebSocket APIs | Latest prices, order-book depth, fallback candles, realtime streams, and historical backfill |
 
 MySQL and DuckDB are intentionally separate. Transactional user and trading state belongs in
 MySQL, while high-volume analytical market data belongs in DuckDB.
@@ -63,8 +67,9 @@ contains about 525,599 `1m` candles per symbol and about 3.38 million rows in to
 including materialized timeframes. The DuckDB file is approximately 334 MB. These values vary
 slightly as new candles are added and old candles pass the retention cutoff.
 
-The current live price and order-book endpoints read Binance directly. Historical chart
-requests use DuckDB first, then fall back to Binance when stored data is unavailable.
+The current live price and order-book endpoints use the in-process realtime cache when
+available, then fall back to Binance REST. Historical chart requests use DuckDB first,
+then fall back to Binance when stored data is unavailable.
 
 ## Setup
 
@@ -149,8 +154,10 @@ Public market endpoints:
 ```text
 GET /api/crypto/assets
 GET /api/crypto/prices/latest
-GET /api/crypto/candles?symbol=BTCUSDT&interval=1h
+GET /api/crypto/candles?symbol=BTCUSDT&timeframe=1h
+GET /api/crypto/indicators?symbol=BTCUSDT&timeframe=1h&indicator=MACD
 GET /api/crypto/orderbook?symbol=BTCUSDT
+WS  /api/crypto/ws
 ```
 
 Contest and trading endpoints:
@@ -162,6 +169,9 @@ GET  /api/crypto/contests/{contest_id}/leaderboard
 POST /api/crypto/contests/{contest_id}/join
 GET  /api/crypto/accounts/{contest_id}
 POST /api/crypto/orders/market
+POST /api/crypto/orders/{order_id}/cancel?contest_id={contest_id}
+GET  /api/leaderboard/{contest_id}?sort_by=equity
+WS   /api/leaderboard/ws/{contest_id}?sort_by=equity
 ```
 
 Admin contest endpoints:
@@ -206,9 +216,9 @@ npm.cmd run build
 
 ## Roadmap
 
-1. Binance WebSocket ingestion for current `1m` candles and synchronized order books.
-2. Persisted leaderboard snapshots and scheduled contest ranking updates.
-3. Admin participant moderation for locking or disqualifying broken accounts.
+1. Persisted leaderboard snapshots and scheduled final contest ranking updates.
+2. Automatic take-profit and stop-loss trigger processing for pending risk controls.
+3. Certificate/export workflow for finalized contest results.
 4. Binance Futures market data after the Spot workflow is stable.
 
 ## Safety
