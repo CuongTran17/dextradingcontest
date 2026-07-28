@@ -21,7 +21,7 @@
             :disabled="joining || joined"
             @click="joinContest"
           >
-            {{ joined ? 'Joined' : joining ? 'Joining...' : 'Join Contest' }}
+            {{ joined ? 'Joined' : joining ? 'Joining...' : 'Connect Solana wallet' }}
           </button>
           <router-link
             class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-gray-900"
@@ -56,6 +56,9 @@
           <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ contest.mode }}</dd>
         </div>
       </dl>
+      <p v-if="joinedWallet" class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+        Solana wallet {{ shortWallet(joinedWallet) }}
+      </p>
       <p v-if="joinError" class="mt-4 text-sm text-rose-600">{{ joinError }}</p>
     </section>
   </main>
@@ -68,7 +71,8 @@ import { useRoute } from 'vue-router'
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { fetchContest } from '@/services/cryptoContestApi'
-import { joinCryptoContest } from '@/services/cryptoTradingApi'
+import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
+import { joinContestOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 const route = useRoute()
@@ -77,12 +81,14 @@ const loading = ref(true)
 const loadError = ref('')
 const joining = ref(false)
 const joined = ref(false)
+const joinedWallet = ref('')
 const joinError = ref('')
 const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
 
 onMounted(async () => {
   try {
     contest.value = await fetchContest(contestId.value)
+    await loadWalletState()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Unable to load contest'
   } finally {
@@ -90,14 +96,33 @@ onMounted(async () => {
   }
 })
 
+async function loadWalletState() {
+  try {
+    const wallet = await fetchContestWallet(contestId.value)
+    if (wallet.wallet_address) {
+      joined.value = true
+      joinedWallet.value = wallet.wallet_address
+    }
+  } catch {
+    joined.value = false
+    joinedWallet.value = ''
+  }
+}
+
 async function joinContest() {
   if (joining.value || joined.value || !contest.value) return
 
   joining.value = true
   joinError.value = ''
   try {
-    await joinCryptoContest(contest.value.id)
+    const onchainJoin = await joinContestOnchain({ contestId: contest.value.id })
+    await confirmSolanaJoin({
+      contestId: contest.value.id,
+      walletAddress: onchainJoin.walletAddress,
+      joinTxSignature: onchainJoin.signature,
+    })
     joined.value = true
+    joinedWallet.value = onchainJoin.walletAddress
   } catch (error) {
     joinError.value = error instanceof Error ? error.message : 'Unable to join contest'
   } finally {
@@ -111,5 +136,9 @@ function formatCurrency(value: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function shortWallet(value: string): string {
+  return `${value.slice(0, 4)}...${value.slice(-4)}`
 }
 </script>

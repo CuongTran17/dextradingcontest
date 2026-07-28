@@ -46,6 +46,14 @@ interface BackendTradingAccount {
   orders: BackendOrder[]
 }
 
+interface BackendContestWallet {
+  contest_id: string
+  wallet_address: string | null
+  wallet_type: string | null
+  join_tx_signature: string | null
+  joined_onchain_at: string | null
+}
+
 async function cryptoAuthFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken()
   if (!token) {
@@ -67,6 +75,29 @@ export async function joinCryptoContest(contestId: string): Promise<TradingAccou
     { method: 'POST' },
   )
   return mapAccount(account)
+}
+
+export async function confirmSolanaJoin(input: {
+  contestId: string
+  walletAddress: string
+  joinTxSignature: string
+}): Promise<BackendContestWallet> {
+  return cryptoAuthFetch<BackendContestWallet>(
+    `/api/crypto/contests/${encodeURIComponent(input.contestId)}/join/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        wallet_address: input.walletAddress,
+        join_tx_signature: input.joinTxSignature,
+      }),
+    },
+  )
+}
+
+export async function fetchContestWallet(contestId: string): Promise<BackendContestWallet> {
+  return cryptoAuthFetch<BackendContestWallet>(
+    `/api/crypto/contests/${encodeURIComponent(contestId)}/wallet`,
+  )
 }
 
 export async function getCryptoAccount(contestId: string): Promise<TradingAccount> {
