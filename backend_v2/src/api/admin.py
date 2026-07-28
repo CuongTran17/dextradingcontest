@@ -28,6 +28,9 @@ from src.services.certificate_export import (
     CertificateExportNotFoundError,
     CertificateExportService,
 )
+from src.services.certificate_renderer import CertificateImageRenderer
+from src.services.pinata_client import PinataClient
+from src.settings import get_settings
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 _require_admin = require_role("admin")
@@ -52,10 +55,13 @@ def get_crypto_settlement_service(
 def get_certificate_export_service(
     db: Session = Depends(get_db),
 ) -> CertificateExportService:
-    del db
-    raise HTTPException(
-        status_code=501,
-        detail="Certificate renderer and Pinata client are not configured yet",
+    settings = get_settings()
+    if not settings.pinata_jwt:
+        raise HTTPException(status_code=501, detail="Pinata JWT is not configured")
+    return CertificateExportService(
+        CryptoTradingRepository(db),
+        pinata_client=PinataClient(settings.pinata_jwt),
+        renderer=CertificateImageRenderer(),
     )
 
 

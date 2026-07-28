@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     solana_rpc_url: str | None = None
     solana_contest_program_id: str | None = None
 
+    pinata_jwt: str | None = None
+    pinata_gateway_url: str = "https://gateway.pinata.cloud/ipfs"
+
     crypto_repair_on_startup: bool = True
     crypto_repair_lookback_days: int = Field(default=365, ge=1, le=3650)
     crypto_repair_interval_seconds: int = Field(default=300, ge=60, le=24 * 60 * 60)
