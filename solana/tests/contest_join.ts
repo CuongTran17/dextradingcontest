@@ -50,7 +50,7 @@ describe("contest_nft join", () => {
       })
       .rpc();
 
-    const account = await program.account.participant.fetch(participant);
+    const account = await (program.account as any).participant.fetch(participant);
     assert.equal(account.wallet.toBase58(), provider.wallet.publicKey.toBase58());
 
     try {

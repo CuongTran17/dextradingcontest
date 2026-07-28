@@ -3,10 +3,10 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-contest_nft = "Fg6PaFpoGXkYsidMpWxTWqGxUQimA1H8XmRjgoSvnF"
+contest_nft = "9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx"
 
 [programs.devnet]
-contest_nft = "Fg6PaFpoGXkYsidMpWxTWqGxUQimA1H8XmRjgoSvnF"
+contest_nft = "9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx"
 
 [registry]
 url = "https://api.apr.dev"

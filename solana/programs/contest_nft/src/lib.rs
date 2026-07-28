@@ -1,8 +1,11 @@
 use anchor_lang::prelude::*;
+use solana_sha256_hasher::hashv;
 
-declare_id!("Fg6PaFpoGXkYsidMpWxTWqGxUQimA1H8XmRjgoSvnF");
+declare_id!("9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx");
 
 const MAX_CONTEST_ID_LEN: usize = 32;
+const MAX_METADATA_URI_LEN: usize = 200;
+const MAX_MERKLE_PROOF_LEN: usize = 16;
 
 #[program]
 pub mod contest_nft {
@@ -54,6 +57,55 @@ pub mod contest_nft {
     ) -> Result<()> {
         ctx.accounts.contest.certificate_root = root;
         ctx.accounts.contest.snapshot_hash = snapshot_hash;
+        Ok(())
+    }
+
+    pub fn claim_certificate(
+        ctx: Context<ClaimCertificate>,
+        contest_id: String,
+        rank: u8,
+        metadata_uri: String,
+        snapshot_hash: [u8; 32],
+        proof: Vec<[u8; 32]>,
+    ) -> Result<()> {
+        require!(
+            contest_id == ctx.accounts.contest.contest_id,
+            ContestNftError::ContestMismatch
+        );
+        require!(
+            metadata_uri.as_bytes().len() <= MAX_METADATA_URI_LEN,
+            ContestNftError::MetadataUriTooLong
+        );
+        require!(
+            proof.len() <= MAX_MERKLE_PROOF_LEN,
+            ContestNftError::ProofTooLong
+        );
+        require!(
+            snapshot_hash == ctx.accounts.contest.snapshot_hash,
+            ContestNftError::SnapshotHashMismatch
+        );
+
+        let leaf = certificate_leaf(
+            &contest_id,
+            &ctx.accounts.wallet.key().to_string(),
+            rank,
+            &metadata_uri,
+            &snapshot_hash,
+        );
+        let root = merkle_root_from_proof(leaf, &proof);
+        require!(
+            root == ctx.accounts.contest.certificate_root,
+            ContestNftError::InvalidMerkleProof
+        );
+
+        let certificate = &mut ctx.accounts.certificate;
+        certificate.contest = ctx.accounts.contest.key();
+        certificate.wallet = ctx.accounts.wallet.key();
+        certificate.rank = rank;
+        certificate.metadata_uri = metadata_uri;
+        certificate.snapshot_hash = snapshot_hash;
+        certificate.claimed_at = Clock::get()?.unix_timestamp;
+        certificate.bump = ctx.bumps.certificate;
         Ok(())
     }
 }
@@ -118,6 +170,26 @@ pub struct PublishCertificateRoot<'info> {
     pub admin: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct ClaimCertificate<'info> {
+    #[account(
+        seeds = [b"contest", contest.contest_id.as_bytes()],
+        bump = contest.bump
+    )]
+    pub contest: Account<'info, ContestState>,
+    #[account(
+        init,
+        payer = wallet,
+        space = CertificateClaim::LEN,
+        seeds = [b"certificate", contest.key().as_ref(), wallet.key().as_ref()],
+        bump
+    )]
+    pub certificate: Account<'info, CertificateClaim>,
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[account]
 pub struct ContestState {
     pub admin: Pubkey,
@@ -144,10 +216,78 @@ impl Participant {
     pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
 }
 
+#[account]
+pub struct CertificateClaim {
+    pub contest: Pubkey,
+    pub wallet: Pubkey,
+    pub rank: u8,
+    pub metadata_uri: String,
+    pub snapshot_hash: [u8; 32],
+    pub claimed_at: i64,
+    pub bump: u8,
+}
+
+impl CertificateClaim {
+    pub const LEN: usize = 8 + 32 + 32 + 1 + 4 + MAX_METADATA_URI_LEN + 32 + 8 + 1;
+}
+
+fn certificate_leaf(
+    contest_id: &str,
+    wallet: &str,
+    rank: u8,
+    metadata_uri: &str,
+    snapshot_hash: &[u8; 32],
+) -> [u8; 32] {
+    let payload = format!(
+        "{{\"contest_id\":\"{}\",\"metadata_uri\":\"{}\",\"rank\":{},\"snapshot_hash\":\"{}\",\"wallet\":\"{}\"}}",
+        contest_id,
+        metadata_uri,
+        rank,
+        hex_lower(snapshot_hash),
+        wallet
+    );
+    hashv(&[payload.as_bytes()]).to_bytes()
+}
+
+fn merkle_root_from_proof(mut leaf: [u8; 32], proof: &[[u8; 32]]) -> [u8; 32] {
+    for sibling in proof {
+        leaf = hash_sorted_pair(&leaf, sibling);
+    }
+    leaf
+}
+
+fn hash_sorted_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    if left <= right {
+        hashv(&[left.as_ref(), right.as_ref()]).to_bytes()
+    } else {
+        hashv(&[right.as_ref(), left.as_ref()]).to_bytes()
+    }
+}
+
+fn hex_lower(bytes: &[u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
 #[error_code]
 pub enum ContestNftError {
     #[msg("Contest id must fit in a Solana PDA seed")]
     ContestIdTooLong,
     #[msg("Contest joins are disabled")]
     JoinDisabled,
+    #[msg("Certificate contest does not match")]
+    ContestMismatch,
+    #[msg("Certificate metadata URI is too long")]
+    MetadataUriTooLong,
+    #[msg("Merkle proof is too long")]
+    ProofTooLong,
+    #[msg("Certificate snapshot hash does not match")]
+    SnapshotHashMismatch,
+    #[msg("Certificate Merkle proof is invalid")]
+    InvalidMerkleProof,
 }

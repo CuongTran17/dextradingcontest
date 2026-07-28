@@ -80,3 +80,8 @@ backend_v2/.env
 .env
 !.env.example
 !backend_v2/.env.example
+
+# Solana/Anchor generated artifacts and deploy keypairs
+solana/.anchor/
+solana/target/
+solana/test-ledger/

@@ -46,11 +46,11 @@ solana-cli 2.3.11
 anchor-cli 0.32.1
 ```
 
-Neu `surfpool` chua co thi khong sao cho devnet deploy. Local `anchor test` co the chay bang legacy validator:
+Neu `surfpool` chua co thi khong sao cho devnet deploy. Voi Anchor 0.32.1 trong moi truong nay, local test chay bang:
 
 ```bash
 cd solana
-anchor test --validator legacy
+anchor test
 ```
 
 ## 3. Cai Dependency Cho Anchor Tests
@@ -128,7 +128,7 @@ Neu `anchor keys sync` lam thay doi file, gui lai `git diff -- solana/programs/c
 Trong `solana/`:
 
 ```bash
-anchor test --validator legacy
+anchor test
 ```
 
 Neu muon build nhanh khong test:
@@ -143,7 +143,7 @@ Neu fail, copy toan bo output loi va gui lai cho Codex. Nhung loi quan trong nha
 anchor --version
 solana --version
 anchor build
-anchor test --validator legacy
+anchor test
 ```
 
 ## 7. Publish Smart Contract Len Devnet
