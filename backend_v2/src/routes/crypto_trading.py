@@ -6,8 +6,10 @@ from src.database.db import get_db
 from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import (
+    ContestWalletResponse,
     MarketOrderCreate,
     OrderResponse,
+    SolanaJoinConfirmRequest,
     TradingAccountResponse,
 )
 from src.services.binance_market_data import get_order_book
@@ -28,6 +30,14 @@ from src.services.crypto_execution import (
     InsufficientDepthError,
     InsufficientPositionError,
 )
+from src.services.solana_join import (
+    ContestUnavailableForSolanaJoinError,
+    SolanaRpcTransactionVerifier,
+    SolanaJoinService,
+    SolanaJoinVerificationError,
+    WalletAlreadyBoundError,
+)
+from src.settings import get_settings
 
 router = APIRouter(prefix="/api/crypto", tags=["crypto-trading"])
 
@@ -55,6 +65,19 @@ def get_order_service(
     return CryptoOrderService(
         CryptoTradingRepository(db),
         BinanceRestLiquidityProvider(),
+    )
+
+
+def get_solana_join_service(
+    db: Session = Depends(get_db),
+) -> SolanaJoinService:
+    settings = get_settings()
+    return SolanaJoinService(
+        CryptoTradingRepository(db),
+        tx_verifier=SolanaRpcTransactionVerifier(
+            settings.solana_rpc_url,
+            settings.solana_contest_program_id,
+        ),
     )
 
 
@@ -101,6 +124,43 @@ def join_contest(
         return service.join_contest(current_user.id, contest_id)
     except ContestNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/contests/{contest_id}/wallet",
+    response_model=ContestWalletResponse,
+)
+def get_contest_wallet(
+    contest_id: str,
+    current_user: User = Depends(require_auth),
+    service: SolanaJoinService = Depends(get_solana_join_service),
+):
+    return service.get_wallet(current_user.id, contest_id)
+
+
+@router.post(
+    "/contests/{contest_id}/join/confirm",
+    response_model=ContestWalletResponse,
+)
+def confirm_solana_join(
+    contest_id: str,
+    body: SolanaJoinConfirmRequest,
+    current_user: User = Depends(require_auth),
+    service: SolanaJoinService = Depends(get_solana_join_service),
+):
+    try:
+        return service.confirm_join(
+            current_user.id,
+            contest_id,
+            body.wallet_address,
+            body.join_tx_signature,
+        )
+    except ContestUnavailableForSolanaJoinError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WalletAlreadyBoundError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SolanaJoinVerificationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get(

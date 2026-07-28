@@ -26,6 +26,19 @@ class MarketOrderCreate(BaseModel):
     take_profit_price: Decimal | None = Field(default=None, gt=0)
 
 
+class SolanaJoinConfirmRequest(BaseModel):
+    wallet_address: str = Field(min_length=32, max_length=64)
+    join_tx_signature: str = Field(min_length=32, max_length=128)
+
+
+class ContestWalletResponse(BaseModel):
+    contest_id: str
+    wallet_address: str | None
+    wallet_type: str | None
+    join_tx_signature: str | None
+    joined_onchain_at: str | None
+
+
 class ContestResponse(BaseModel):
     id: str
     title: str

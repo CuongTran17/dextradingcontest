@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5174"
     backend_url: str = "http://localhost:8000"
 
+    solana_rpc_url: str | None = None
+    solana_contest_program_id: str | None = None
+
     crypto_repair_on_startup: bool = True
     crypto_repair_lookback_days: int = Field(default=365, ge=1, le=3650)
     crypto_repair_interval_seconds: int = Field(default=300, ge=60, le=24 * 60 * 60)

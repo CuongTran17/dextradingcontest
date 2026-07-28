@@ -8,6 +8,7 @@ from src.routes.crypto_trading import (
     get_account_service,
     get_contest_service,
     get_order_service,
+    get_solana_join_service,
     router,
 )
 
@@ -108,6 +109,35 @@ class FakeContestService:
         ]
 
 
+class FakeSolanaJoinService:
+    def __init__(self):
+        self.confirmed = None
+
+    def get_wallet(self, user_id, contest_slug):
+        return {
+            "contest_id": contest_slug,
+            "wallet_address": "So11111111111111111111111111111111111111112",
+            "wallet_type": "solana",
+            "join_tx_signature": "5" * 88,
+            "joined_onchain_at": "2026-07-28T12:00:00+00:00",
+        }
+
+    def confirm_join(self, user_id, contest_slug, wallet_address, join_tx_signature):
+        self.confirmed = {
+            "user_id": user_id,
+            "contest_slug": contest_slug,
+            "wallet_address": wallet_address,
+            "join_tx_signature": join_tx_signature,
+        }
+        return {
+            "contest_id": contest_slug,
+            "wallet_address": wallet_address,
+            "wallet_type": "solana",
+            "join_tx_signature": join_tx_signature,
+            "joined_onchain_at": "2026-07-28T12:00:00+00:00",
+        }
+
+
 def _make_app(authenticated=False):
     app = FastAPI()
     app.include_router(router)
@@ -201,4 +231,34 @@ def test_market_order_does_not_pass_client_portfolio_to_service():
         "limit_price": None,
         "stop_loss_price": None,
         "take_profit_price": None,
+    }
+
+
+def test_solana_wallet_routes_return_bound_wallet_and_confirm_join():
+    app, _order_service = _make_app(authenticated=True)
+    service = FakeSolanaJoinService()
+    app.dependency_overrides[get_solana_join_service] = lambda: service
+    client = TestClient(app)
+
+    wallet_response = client.get("/api/crypto/contests/summer-cup/wallet")
+    assert wallet_response.status_code == 200
+    assert wallet_response.json()["wallet_address"] == (
+        "So11111111111111111111111111111111111111112"
+    )
+
+    confirm_response = client.post(
+        "/api/crypto/contests/summer-cup/join/confirm",
+        json={
+            "wallet_address": "So11111111111111111111111111111111111111112",
+            "join_tx_signature": "5" * 88,
+        },
+    )
+
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["wallet_type"] == "solana"
+    assert service.confirmed == {
+        "user_id": 3,
+        "contest_slug": "summer-cup",
+        "wallet_address": "So11111111111111111111111111111111111111112",
+        "join_tx_signature": "5" * 88,
     }
