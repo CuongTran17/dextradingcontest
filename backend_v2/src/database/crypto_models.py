@@ -147,6 +147,10 @@ class ContestParticipant(Base):
     final_rank = Column(Integer, nullable=True)
     final_equity = Column(Numeric(36, 18), nullable=True)
     final_roi = Column(Numeric(18, 8), nullable=True)
+    wallet_address = Column(String(64), nullable=True)
+    wallet_type = Column(String(32), nullable=True)
+    join_tx_signature = Column(String(128), nullable=True)
+    joined_onchain_at = Column(DateTime, nullable=True)
 
     contest = relationship("Contest", overlaps="participants")
     user = relationship("User")

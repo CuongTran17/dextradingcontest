@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import or_
@@ -222,6 +223,27 @@ class CryptoTradingRepository:
             )
             .first()
         )
+
+    def get_participant_wallet(
+        self,
+        contest_slug: str,
+        user_id: int,
+    ) -> ContestParticipant | None:
+        return self.get_contest_participant_by_user(contest_slug, user_id)
+
+    def set_participant_wallet(
+        self,
+        participant: ContestParticipant,
+        wallet_address: str,
+        wallet_type: str,
+        join_tx_signature: str,
+        joined_onchain_at: datetime,
+    ) -> ContestParticipant:
+        participant.wallet_address = wallet_address
+        participant.wallet_type = wallet_type
+        participant.join_tx_signature = join_tx_signature
+        participant.joined_onchain_at = joined_onchain_at
+        return participant
 
     def create_participant(
         self,
