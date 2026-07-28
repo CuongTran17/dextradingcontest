@@ -1,17 +1,34 @@
-# Solana Devnet/Testnet Deployment Guide
+# Solana Devnet Deployment Guide
 
-This guide explains how to deploy the contest Anchor program to Solana devnet or testnet from WSL.
+Huong dan nay dung de ban publish Anchor smart contract cua contest len Solana devnet tu WSL.
 
-Current repo status as of 2026-07-28:
+Tinh trang hien tai:
 
-- The Solana feature is designed in `docs/superpowers/specs/2026-07-28-solana-contest-nft-design.md`.
-- The implementation plan is in `docs/superpowers/plans/2026-07-28-solana-contest-nft.md`.
-- The Anchor workspace is not scaffolded yet. The expected path is `solana/`.
-- Codex on Windows currently cannot call WSL directly because `wsl` returns `E_ACCESSDENIED`, so run the commands below manually inside WSL until that permission is available.
+- Anchor workspace da co tai `solana/`.
+- Program crate: `solana/programs/contest_nft`.
+- Program hien co cac instruction nen tang: `initialize_contest`, `set_join_enabled`, `join_contest`, `publish_certificate_root`.
+- Dang code tiep certificate claim/Merkle verification. Metaplex NFT mint CPI co the can them dependency va script rieng sau khi contract build/test on trong WSL.
+- Codex Windows hien khong goi duoc WSL truc tiep vi `wsl` tra `E_ACCESSDENIED`, nen cac lenh deploy ben duoi can chay thu cong trong WSL terminal.
 
-## 1. Toolchain Check
+## 1. Mo Repo Trong WSL
 
-Run inside WSL:
+Chay trong WSL:
+
+```bash
+cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest
+git status --short
+```
+
+Neu thao tac tren `/mnt/c` cham, co the copy repo vao filesystem Linux:
+
+```bash
+cp -r /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest ~/crypto-dex-trading-contest
+cd ~/crypto-dex-trading-contest
+```
+
+Neu copy sang `~/crypto-dex-trading-contest`, sau khi deploy xong hay gui lai output cho Codex de cap nhat repo Windows neu can.
+
+## 2. Kiem Tra Toolchain
 
 ```bash
 rustc --version
@@ -21,7 +38,7 @@ node --version
 yarn --version
 ```
 
-Known working versions from your WSL environment:
+Ban da bao moi truong WSL hien co:
 
 ```text
 rustc 1.90.0
@@ -29,30 +46,32 @@ solana-cli 2.3.11
 anchor-cli 0.32.1
 ```
 
-`surfpool` is optional. Anchor 0.32 can use Surfpool for local tests by default, but devnet/testnet deployment does not require it. If local `anchor test` needs it, install Surfpool or run local tests with the legacy validator:
+Neu `surfpool` chua co thi khong sao cho devnet deploy. Local `anchor test` co the chay bang legacy validator:
 
 ```bash
+cd solana
 anchor test --validator legacy
 ```
 
-## 2. Open The Repo In WSL
+## 3. Cai Dependency Cho Anchor Tests
 
-From WSL:
-
-```bash
-cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest
-```
-
-If WSL file IO becomes slow, copy the repo into the Linux filesystem and work there:
+Trong repo:
 
 ```bash
-cp -r /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest ~/crypto-dex-trading-contest
-cd ~/crypto-dex-trading-contest
+cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
+npm install
 ```
 
-## 3. Create A Devnet/Testnet Deployer Wallet
+Neu ban dang dung Yarn thay npm:
 
-Use a dedicated development wallet only. Do not use a mainnet wallet or seed phrase.
+```bash
+cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
+yarn install
+```
+
+## 4. Tao Devnet Deployer Wallet
+
+Dung wallet rieng cho devnet. Khong dung mainnet wallet hoac seed phrase quan trong.
 
 ```bash
 mkdir -p ~/.config/solana
@@ -61,91 +80,26 @@ solana config set --keypair ~/.config/solana/contest-devnet.json
 solana address
 ```
 
-Set the cluster.
-
-For devnet:
+Chon devnet:
 
 ```bash
 solana config set --url devnet
+solana config get
 solana balance
 ```
 
-For testnet:
-
-```bash
-solana config set --url testnet
-solana balance
-```
-
-For this MVP, prefer devnet first. Testnet can be less convenient for faucets and temporary testing.
-
-## 4. Fund The Wallet
-
-Devnet:
+Nap SOL devnet:
 
 ```bash
 solana airdrop 2
 solana balance
 ```
 
-If the CLI faucet is rate limited, use the official faucet:
+Neu faucet CLI bi rate limit, dung faucet web: https://faucet.solana.com/
 
-```text
-https://faucet.solana.com/
-```
+## 5. Build Va Sync Program ID
 
-Deployment can cost more than a small transaction, so keep a few devnet SOL available.
-
-## 5. Scaffold The Anchor Workspace
-
-Only do this after the codebase task for the smart contract starts. The implementation plan expects this structure:
-
-```text
-solana/
-  Anchor.toml
-  programs/
-    contest_nft/
-      Cargo.toml
-      src/lib.rs
-  tests/
-    contest_join.ts
-```
-
-If creating from scratch manually:
-
-```bash
-anchor init solana
-cd solana
-anchor new contest_nft
-```
-
-Then adapt the generated structure to match the implementation plan.
-
-## 6. Configure Anchor Cluster And Wallet
-
-Edit `solana/Anchor.toml`.
-
-For devnet:
-
-```toml
-[provider]
-cluster = "Devnet"
-wallet = "~/.config/solana/contest-devnet.json"
-```
-
-For testnet:
-
-```toml
-[provider]
-cluster = "Testnet"
-wallet = "~/.config/solana/contest-devnet.json"
-```
-
-Keep the deployer keypair private. It is the upgrade authority unless you transfer or remove upgrade authority later.
-
-## 7. Build And Sync Program ID
-
-From the Anchor workspace:
+Chay trong `solana/`:
 
 ```bash
 cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
@@ -155,41 +109,50 @@ anchor keys sync
 anchor build
 ```
 
-Why run `anchor keys sync`: it updates the Rust `declare_id!` value to match the generated program keypair under `target/deploy/`.
-
-After this, note the program ID:
+Sau `anchor keys sync`, kiem tra `solana/programs/contest_nft/src/lib.rs`. Dong `declare_id!(...)` phai khop voi:
 
 ```bash
 anchor keys list
 ```
 
-Expected output shape:
+Output can luu:
 
 ```text
 contest_nft: <PROGRAM_ID>
 ```
 
-## 8. Run Tests
+Neu `anchor keys sync` lam thay doi file, gui lai `git diff -- solana/programs/contest_nft/src/lib.rs solana/Anchor.toml` de Codex kiem tra truoc khi commit.
 
-For local validator with legacy Solana validator:
+## 6. Run Local Tests
+
+Trong `solana/`:
 
 ```bash
 anchor test --validator legacy
 ```
 
-If you want to run tests against devnet after deployment, use:
+Neu muon build nhanh khong test:
 
 ```bash
-anchor test --skip-local-validator
+anchor build
 ```
 
-Use devnet tests carefully because they spend devnet SOL and leave accounts on-chain.
-
-## 9. Deploy To Devnet/Testnet
-
-Confirm the target cluster first:
+Neu fail, copy toan bo output loi va gui lai cho Codex. Nhung loi quan trong nhat can paste gom:
 
 ```bash
+anchor --version
+solana --version
+anchor build
+anchor test --validator legacy
+```
+
+## 7. Publish Smart Contract Len Devnet
+
+Kiem tra cluster va balance:
+
+```bash
+solana config set --url devnet
+solana config set --keypair ~/.config/solana/contest-devnet.json
 solana config get
 solana balance
 ```
@@ -197,45 +160,44 @@ solana balance
 Deploy:
 
 ```bash
-anchor deploy
+cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
+anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/contest-devnet.json
 ```
 
-Verify the program exists:
+Kiem tra program:
 
 ```bash
-solana program show <PROGRAM_ID>
+anchor keys list
+solana program show <PROGRAM_ID> --url devnet
 ```
 
-Save these values after deploy:
+Luu lai cac gia tri nay:
 
 ```text
 SOLANA_CLUSTER=devnet
 SOLANA_RPC_URL=https://api.devnet.solana.com
 SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
-SOLANA_DEPLOYER_ADDRESS=<DEPLOYER_WALLET_ADDRESS>
+SOLANA_DEPLOYER_ADDRESS=<solana address>
 ```
 
-For testnet:
+Lay deployer address:
 
-```text
-SOLANA_CLUSTER=testnet
-SOLANA_RPC_URL=https://api.testnet.solana.com
-SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
-SOLANA_DEPLOYER_ADDRESS=<DEPLOYER_WALLET_ADDRESS>
+```bash
+solana address
 ```
 
-## 10. Update Application Configuration
-
-After the backend/frontend Solana integration is implemented, add these env values.
+## 8. Cap Nhat App Env
 
 Backend `backend_v2/.env`:
 
 ```env
 SOLANA_RPC_URL=https://api.devnet.solana.com
 SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
+PINATA_JWT=<PINATA_JWT_CUA_BAN>
+PINATA_GATEWAY_URL=https://gateway.pinata.cloud/ipfs
 ```
 
-Frontend `.env` or Vite env file:
+Frontend Vite env, neu repo dung file `.env` o root:
 
 ```env
 VITE_SOLANA_CLUSTER=devnet
@@ -243,104 +205,132 @@ VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
 VITE_SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
 ```
 
-If the repo later uses different setting names, prefer the names implemented in `backend_v2/src/settings.py` and `src/services/solanaWallet.ts`.
+Hien backend da co `SOLANA_RPC_URL`, `SOLANA_CONTEST_PROGRAM_ID`, `PINATA_JWT`, `PINATA_GATEWAY_URL` trong `backend_v2/.env.example`.
 
-## 11. Admin On-Chain Operations
+## 9. Initialize Contest On-chain
 
-The MVP design expects these program instructions:
+Sau khi deploy, moi contest can duoc initialize on-chain truoc khi user join. Hien repo chua co checked-in script rieng cho admin instruction, nen buoc nay se duoc them sau khi client script hoan tat.
+
+Flow du kien:
 
 ```text
-initialize_contest(contest_id)
-set_join_enabled(contest_id, enabled)
-publish_certificate_root(contest_id, root, snapshot_hash)
+1. Backend tao contest.
+2. Admin goi initialize_contest(contest_id) tren devnet.
+3. Admin bat/tat join bang set_join_enabled(enabled).
+4. User connect wallet va goi join_contest.
+5. Backend verify tx va lock wallet cho participant.
+6. Backend settle contest, export top-10 certificate, upload Pinata.
+7. Admin publish_certificate_root(root, snapshot_hash).
+8. User claim/mint certificate NFT.
 ```
 
-Typical flow:
+Khi can chay admin instruction ngay, bao Codex tao `solana/scripts/admin.ts` de goi:
 
-1. Deploy the program.
-2. Initialize each contest on-chain.
-3. Enable joins before the contest starts.
-4. Users join by signing `join_contest`.
-5. Backend verifies and binds wallet address to the contest participant.
-6. Admin settles the contest in the backend.
-7. Backend exports certificate metadata, Pinata URIs, Merkle proofs, and Merkle root.
-8. Admin publishes `certificate_root` and `snapshot_hash` on-chain.
-9. Eligible users claim/mint their certificate NFT.
+```text
+initialize_contest
+set_join_enabled
+publish_certificate_root
+```
 
-The exact command or script for these instructions should be added when the Anchor TypeScript client is implemented. Prefer a checked-in script under `solana/scripts/` instead of hand-running one-off JavaScript.
+## 10. Testnet Tuy Chon
 
-## 12. What Codex Can Do
-
-Codex can safely do these when WSL access is available:
-
-- Build and test the Anchor program.
-- Deploy to devnet/testnet using a dedicated dev keypair.
-- Update `Anchor.toml`, `declare_id!`, frontend env examples, and backend env examples.
-- Run verification commands and report the program ID.
-
-You should do or explicitly approve these:
-
-- Create or provide the deployer keypair.
-- Fund the deployer wallet.
-- Decide whether to transfer upgrade authority.
-- Any mainnet deployment. This project should stay devnet/testnet for the MVP.
-
-## 13. Upgrade And Authority Notes
-
-To upgrade the same program later:
+Devnet nen la target dau tien. Neu can testnet:
 
 ```bash
+solana config set --url testnet
+anchor deploy --provider.cluster testnet --provider.wallet ~/.config/solana/contest-devnet.json
+solana program show <PROGRAM_ID> --url testnet
+```
+
+Env testnet:
+
+```env
+SOLANA_RPC_URL=https://api.testnet.solana.com
+SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
+```
+
+## 11. Troubleshooting
+
+`anchor: command not found`
+
+```bash
+cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+avm install 0.32.1
+avm use 0.32.1
+anchor --version
+```
+
+`DeclaredProgramIdMismatch`
+
+```bash
+cd solana
+anchor keys list
+anchor keys sync
 anchor build
-anchor deploy
 ```
 
-The configured wallet must still be the upgrade authority.
-
-To inspect authority:
+`insufficient funds`
 
 ```bash
-solana program show <PROGRAM_ID>
+solana balance
+solana airdrop 2
 ```
 
-Do not finalize the upgrade authority during MVP testing. Finalizing makes the program immutable and prevents future upgrades:
+`AccountNotFound` sau deploy:
 
 ```bash
-solana program set-upgrade-authority <PROGRAM_ID> --final
+solana config get
+solana program show <PROGRAM_ID> --url devnet
 ```
 
-Only use that after an explicit production governance decision.
+Dam bao `PROGRAM_ID` va cluster devnet khop voi luc deploy.
 
-## 14. Troubleshooting
+`npm install` fail trong `/mnt/c`
 
-`Error: AccountNotFound` after deploy:
+Thu copy repo vao filesystem Linux:
 
-- Wait a few seconds and retry `solana program show <PROGRAM_ID>`.
-- Confirm `solana config get` points at the same cluster used by Anchor.
+```bash
+cp -r /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest ~/crypto-dex-trading-contest
+cd ~/crypto-dex-trading-contest/solana
+npm install
+anchor build
+```
 
-`insufficient funds`:
+## 12. Output Can Gui Lai Cho Codex
 
-- Run `solana balance`.
-- Request more devnet SOL with `solana airdrop 2` or the web faucet.
+Sau khi ban chay deploy, gui lai block nay:
 
-`DeclaredProgramIdMismatch`:
+```text
+anchor keys list
+solana address
+solana program show <PROGRAM_ID> --url devnet
+```
 
-- Run `anchor keys list`.
-- Run `anchor keys sync`.
-- Rebuild with `anchor build`.
+Neu deploy thanh cong, Codex se cap nhat:
 
-`anchor test` fails because Surfpool is missing:
+- `solana/Anchor.toml` neu program id thay doi.
+- `declare_id!` neu `anchor keys sync` thay doi id.
+- Env/docs lien quan.
+- Cac script admin neu can initialize contest hoac publish certificate root.
 
-- Use `anchor test --validator legacy`, or install Surfpool if you want Anchor's default local backend.
+## 13. Authority Notes
 
-`wsl` is blocked from Codex:
+Trong MVP, khong finalize upgrade authority. Neu finalize, program se immutable va khong upgrade duoc nua.
 
-- Run deployment commands directly inside your WSL terminal.
-- Keep this guide open and paste back command outputs when you want me to inspect errors.
+Kiem tra authority:
 
-## 15. Official References
+```bash
+solana program show <PROGRAM_ID> --url devnet
+```
 
-- Anchor installation: https://www.anchor-lang.com/docs/installation
-- Anchor CLI reference: https://www.anchor-lang.com/docs/references/cli
-- Anchor local development and devnet deployment: https://www.anchor-lang.com/docs/quickstart/local
-- Solana devnet faucet: https://faucet.solana.com/
-- Solana program deployment CLI reference: https://solana.com/docs/programs/deploying
+Lenh finalize, chi dung khi co quyet dinh production ro rang:
+
+```bash
+solana program set-upgrade-authority <PROGRAM_ID> --final --url devnet
+```
+
+## 14. References
+
+- Anchor CLI: https://www.anchor-lang.com/docs/references/cli
+- Solana faucet: https://faucet.solana.com/
+- Solana deploy docs: https://solana.com/docs/programs/deploying
