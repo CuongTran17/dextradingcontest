@@ -24,6 +24,10 @@ from src.services.crypto_settlement import (
     CryptoSettlementService,
     SettlementPriceUnavailableError,
 )
+from src.services.certificate_export import (
+    CertificateExportNotFoundError,
+    CertificateExportService,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 _require_admin = require_role("admin")
@@ -43,6 +47,16 @@ def get_crypto_settlement_service(
     db: Session = Depends(get_db),
 ) -> CryptoSettlementService:
     return CryptoSettlementService(CryptoTradingRepository(db))
+
+
+def get_certificate_export_service(
+    db: Session = Depends(get_db),
+) -> CertificateExportService:
+    del db
+    raise HTTPException(
+        status_code=501,
+        detail="Certificate renderer and Pinata client are not configured yet",
+    )
 
 
 @router.get("/users")
@@ -291,6 +305,18 @@ def admin_get_crypto_contest_settlement(
     try:
         return service.get_latest_settlement(contest_id)
     except ContestSettlementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/crypto/contests/{contest_id}/certificates/export")
+def admin_export_crypto_contest_certificates(
+    contest_id: str,
+    current_user: User = Depends(_require_admin),
+    service: CertificateExportService = Depends(get_certificate_export_service),
+):
+    try:
+        return service.export_top10(contest_id, exported_by=current_user.id)
+    except CertificateExportNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

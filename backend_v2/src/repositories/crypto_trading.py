@@ -11,6 +11,7 @@ from src.database.crypto_models import (
     ContestParticipant,
     CryptoAccountEvent,
     CryptoAsset,
+    CryptoCertificateClaim,
     CryptoContestSettlement,
     CryptoOrderEvent,
     Position,
@@ -484,6 +485,13 @@ class CryptoTradingRepository:
     ) -> CryptoContestSettlement:
         self.db.add(settlement)
         return settlement
+
+    def add_certificate_claim(
+        self,
+        claim: CryptoCertificateClaim,
+    ) -> CryptoCertificateClaim:
+        self.db.add(claim)
+        return claim
 
     def add_account_event(self, event: CryptoAccountEvent) -> CryptoAccountEvent:
         self.db.add(event)

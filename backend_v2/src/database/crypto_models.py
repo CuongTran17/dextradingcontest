@@ -351,6 +351,48 @@ class CryptoContestSettlement(Base):
     contest = relationship("Contest")
 
 
+class CryptoCertificateClaim(Base):
+    __tablename__ = "crypto_certificate_claims"
+    __table_args__ = (
+        UniqueConstraint(
+            "contest_id",
+            "wallet_address",
+            name="uq_certificate_claim_contest_wallet",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    contest_id = Column(
+        BigInteger,
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    participant_id = Column(
+        BigInteger,
+        ForeignKey("contest_participants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    wallet_address = Column(String(64), nullable=False)
+    rank = Column(Integer, nullable=False)
+    recipient_name = Column(String(255), nullable=False)
+    final_equity = Column(Numeric(36, 18), nullable=False)
+    roi = Column(Numeric(18, 8), nullable=False)
+    snapshot_hash = Column(String(64), nullable=False)
+    certificate_image_uri = Column(String(255), nullable=False)
+    certificate_metadata_uri = Column(String(255), nullable=False)
+    merkle_leaf = Column(String(64), nullable=False)
+    merkle_proof_json = Column(Text, nullable=False)
+    mint_address = Column(String(64), nullable=True)
+    mint_tx_signature = Column(String(128), nullable=True)
+    claimed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    contest = relationship("Contest")
+    participant = relationship("ContestParticipant")
+
+
 class CryptoAccountEvent(Base):
     __tablename__ = "crypto_account_events"
 
