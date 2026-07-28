@@ -123,6 +123,7 @@ def test_certificate_export_creates_top10_payload_with_metadata_uri():
     assert result["claims"][0]["rank"] == 1
     assert renderer.payloads[0]["contest_title"] == "Summer Cup"
     assert renderer.payloads[0]["rank"] == 1
+    assert renderer.payloads[0]["snapshot_hash"] == "a" * 64
     assert result["claims"][0]["metadata_uri"].startswith("ipfs://metadata-")
     assert result["claims"][0]["proof"]
     assert result["merkle_root"]

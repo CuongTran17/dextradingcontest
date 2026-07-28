@@ -111,7 +111,12 @@ class CertificateExportService:
         claim_payloads = []
         leaves = []
         for row, participant in prepared:
-            image_uri = self._render_and_upload_image(snapshot, row, participant)
+            image_uri = self._render_and_upload_image(
+                snapshot,
+                row,
+                participant,
+                settlement.snapshot_hash,
+            )
             metadata = self._metadata(snapshot, row, participant, image_uri)
             metadata_uri = self.pinata_client.upload_json(
                 f"{contest_slug}-rank-{row['rank']}.json",
@@ -178,7 +183,13 @@ class CertificateExportService:
             "claims": response_claims,
         }
 
-    def _render_and_upload_image(self, snapshot, row, participant) -> str:
+    def _render_and_upload_image(
+        self,
+        snapshot,
+        row,
+        participant,
+        snapshot_hash: str,
+    ) -> str:
         payload = {
             "contest_title": snapshot["contest"]["title"],
             "rank": row["rank"],
@@ -187,7 +198,7 @@ class CertificateExportService:
             "final_equity": f"{row['final_equity']} {snapshot['contest']['quote_asset']}",
             "roi": f"{row['final_roi']}%",
             "settlement_date": snapshot.get("settled_at", "")[:10],
-            "snapshot_hash": snapshot.get("snapshot_hash", ""),
+            "snapshot_hash": snapshot_hash,
         }
         content = self.renderer.render_png(payload)
         return self.pinata_client.upload_bytes(
