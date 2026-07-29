@@ -15,14 +15,17 @@
             Trade {{ contest.symbols.join(', ') }} with {{ formatCurrency(contest.initialCapital) }} virtual capital.
           </p>
         </div>
-        <div class="flex gap-2">
-          <button
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-            :disabled="joining || joined"
-            @click="joinContest"
-          >
-            {{ joined ? 'Joined' : joining ? 'Joining...' : 'Connect Solana wallet' }}
-          </button>
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <SolanaWalletConnect
+            :wallet-address="activeWallet"
+            :wallet-name="walletName"
+            :joined="joined"
+            :connecting="connectingWallet"
+            :joining="joining"
+            :error="joinError"
+            @connect="connectWallet"
+            @join="joinContest"
+          />
           <router-link
             class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-gray-900"
             :to="`/contests/${contest.id}/trade/${contest.symbols[0] || 'BTCUSDT'}`"
@@ -56,10 +59,6 @@
           <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ contest.mode }}</dd>
         </div>
       </dl>
-      <p v-if="joinedWallet" class="mt-4 text-sm text-gray-500 dark:text-gray-400">
-        Solana wallet {{ shortWallet(joinedWallet) }}
-      </p>
-      <p v-if="joinError" class="mt-4 text-sm text-rose-600">{{ joinError }}</p>
     </section>
   </main>
 </template>
@@ -69,21 +68,26 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
+import SolanaWalletConnect from '@/components/crypto/SolanaWalletConnect.vue'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { fetchContest } from '@/services/cryptoContestApi'
 import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
-import { joinContestOnchain } from '@/services/solanaWallet'
+import { connectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 const route = useRoute()
 const contest = ref<Contest | null>(null)
 const loading = ref(true)
 const loadError = ref('')
+const connectingWallet = ref(false)
 const joining = ref(false)
 const joined = ref(false)
+const connectedWallet = ref('')
 const joinedWallet = ref('')
+const walletName = ref('Solana wallet')
 const joinError = ref('')
 const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
+const activeWallet = computed(() => joinedWallet.value || connectedWallet.value)
 
 onMounted(async () => {
   try {
@@ -102,10 +106,27 @@ async function loadWalletState() {
     if (wallet.wallet_address) {
       joined.value = true
       joinedWallet.value = wallet.wallet_address
+      connectedWallet.value = wallet.wallet_address
     }
   } catch {
     joined.value = false
     joinedWallet.value = ''
+  }
+}
+
+async function connectWallet() {
+  if (connectingWallet.value || joined.value) return
+
+  connectingWallet.value = true
+  joinError.value = ''
+  try {
+    const wallet = await connectSolanaWallet()
+    connectedWallet.value = wallet.walletAddress
+    walletName.value = wallet.walletName
+  } catch (error) {
+    joinError.value = error instanceof Error ? error.message : 'Unable to connect Solana wallet'
+  } finally {
+    connectingWallet.value = false
   }
 }
 
@@ -115,7 +136,10 @@ async function joinContest() {
   joining.value = true
   joinError.value = ''
   try {
-    const onchainJoin = await joinContestOnchain({ contestId: contest.value.id })
+    const onchainJoin = await joinContestOnchain({
+      contestId: contest.value.id,
+      walletPublicKey: connectedWallet.value || undefined,
+    })
     await confirmSolanaJoin({
       contestId: contest.value.id,
       walletAddress: onchainJoin.walletAddress,
@@ -138,7 +162,4 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
-function shortWallet(value: string): string {
-  return `${value.slice(0, 4)}...${value.slice(-4)}`
-}
 </script>

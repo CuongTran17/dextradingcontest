@@ -36,6 +36,11 @@ export interface JoinContestOnchainResult {
   signature: string
 }
 
+export interface ConnectSolanaWalletResult {
+  walletAddress: string
+  walletName: string
+}
+
 function solanaRpcUrl(): string {
   return import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL
 }
@@ -53,6 +58,15 @@ function solanaProvider(): SolanaWalletProvider {
     throw new Error('Install Phantom or Solflare to join on Solana')
   }
   return window.solana
+}
+
+export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> {
+  const provider = solanaProvider()
+  const connected = await provider.connect()
+  return {
+    walletAddress: connected.publicKey.toBase58(),
+    walletName: walletProviderName(provider),
+  }
 }
 
 export async function joinContestOnchain(
@@ -103,4 +117,10 @@ export async function joinContestOnchain(
   const signature = await connection.sendRawTransaction(signed.serialize())
   await connection.confirmTransaction(signature, 'confirmed')
   return { walletAddress: wallet.toBase58(), signature }
+}
+
+function walletProviderName(provider: SolanaWalletProvider): string {
+  if (provider.isPhantom) return 'Phantom'
+  if (provider.isSolflare) return 'Solflare'
+  return 'Solana wallet'
 }

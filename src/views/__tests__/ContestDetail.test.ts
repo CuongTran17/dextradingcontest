@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchContest } from '@/services/cryptoContestApi'
 import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
-import { joinContestOnchain } from '@/services/solanaWallet'
+import { connectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
 import ContestDetail from '@/views/ContestDetail.vue'
 
 vi.mock('vue-router', () => ({
@@ -16,6 +16,7 @@ vi.mock('@/services/cryptoTradingApi', () => ({
 }))
 
 vi.mock('@/services/solanaWallet', () => ({
+  connectSolanaWallet: vi.fn(),
   joinContestOnchain: vi.fn(),
 }))
 
@@ -36,6 +37,11 @@ describe('ContestDetail', () => {
       startsAt: '2026-06-01T00:00:00+00:00',
       endsAt: '2026-07-01T00:00:00+00:00',
       participantCount: 2,
+    })
+    vi.mocked(connectSolanaWallet).mockReset()
+    vi.mocked(connectSolanaWallet).mockResolvedValue({
+      walletAddress: 'So11111111111111111111111111111111111111112',
+      walletName: 'Phantom',
     })
     vi.mocked(joinContestOnchain).mockReset()
     vi.mocked(joinContestOnchain).mockResolvedValue({
@@ -87,7 +93,27 @@ describe('ContestDetail', () => {
 
     await flushPromises()
 
+    expect(wrapper.text()).toContain('Wallet not connected')
     expect(wrapper.text()).toContain('Connect Solana wallet')
+  })
+
+  it('connects a Solana wallet before joining on-chain', async () => {
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+    await flushPromises()
+
+    expect(connectSolanaWallet).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Phantom')
+    expect(wrapper.text()).toContain('So11...1112')
+    expect(wrapper.text()).toContain('Join on Solana')
   })
 
   it('shows joined state from an existing backend wallet binding', async () => {
@@ -108,8 +134,8 @@ describe('ContestDetail', () => {
 
     await flushPromises()
 
-    expect(wrapper.get('button').text()).toContain('Joined')
-    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('Joined')
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
     expect(joinContestOnchain).not.toHaveBeenCalled()
   })
 
@@ -123,10 +149,15 @@ describe('ContestDetail', () => {
     })
 
     await flushPromises()
-    await wrapper.get('button').trigger('click')
+    await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
     await flushPromises()
 
-    expect(joinContestOnchain).toHaveBeenCalledWith({ contestId: 'practice-arena' })
+    expect(joinContestOnchain).toHaveBeenCalledWith({
+      contestId: 'practice-arena',
+      walletPublicKey: 'So11111111111111111111111111111111111111112',
+    })
     expect(confirmSolanaJoin).toHaveBeenCalledWith({
       contestId: 'practice-arena',
       walletAddress: 'So11111111111111111111111111111111111111112',
