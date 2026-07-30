@@ -46,6 +46,18 @@
           </router-link>
         </div>
       </div>
+      <div class="mt-4 space-y-1">
+        <p
+          v-if="adminWalletAddress"
+          class="text-xs text-gray-500 dark:text-gray-400"
+          :title="adminWalletAddress"
+        >
+          Admin wallet {{ shortAddress(adminWalletAddress) }}
+        </p>
+        <p v-if="solanaJoinBlockedReason" class="text-sm text-amber-600 dark:text-amber-300">
+          {{ solanaJoinBlockedReason }}
+        </p>
+      </div>
 
       <dl class="mt-6 grid gap-3 md:grid-cols-4">
         <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
@@ -94,6 +106,16 @@ const walletName = ref('Solana wallet')
 const joinError = ref('')
 const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
 const activeWallet = computed(() => joinedWallet.value || connectedWallet.value)
+const solanaReady = computed(() => Boolean(contest.value?.onchainInitializeTxSignature))
+const adminWalletAddress = computed(() => contest.value?.onchainAdminWallet || '')
+const adminWalletBlocked = computed(
+  () => Boolean(activeWallet.value) && activeWallet.value === adminWalletAddress.value,
+)
+const solanaJoinBlockedReason = computed(() => {
+  if (contest.value && !solanaReady.value) return 'Contest is not initialized on Solana yet.'
+  if (adminWalletBlocked.value) return 'The admin wallet that initialized this contest cannot join it.'
+  return ''
+})
 
 onMounted(async () => {
   try {
@@ -137,7 +159,15 @@ async function connectWallet() {
 }
 
 async function joinContest() {
-  if (joining.value || joined.value || !contest.value) return
+  if (
+    joining.value ||
+    joined.value ||
+    !contest.value ||
+    !solanaReady.value ||
+    adminWalletBlocked.value
+  ) {
+    return
+  }
 
   joining.value = true
   joinError.value = ''
@@ -166,6 +196,10 @@ function formatCurrency(value: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 4)}...${address.slice(-4)}`
 }
 
 </script>

@@ -21,6 +21,10 @@ class ContestUnavailableForSolanaJoinError(SolanaJoinError):
     pass
 
 
+class AdminWalletCannotJoinContestError(SolanaJoinError):
+    pass
+
+
 TxVerifier = Callable[[str, str, str], bool]
 RpcPost = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -153,6 +157,11 @@ class SolanaJoinService:
             )
 
         contest = self._get_joinable_contest(contest_slug)
+        if getattr(contest, "onchain_admin_wallet", None) == wallet_address:
+            raise AdminWalletCannotJoinContestError(
+                "The admin wallet that initialized this contest cannot join it"
+            )
+
         if not self.tx_verifier(join_tx_signature, wallet_address, contest_slug):
             raise SolanaJoinVerificationError("Solana join transaction could not be verified")
 

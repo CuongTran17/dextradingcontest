@@ -37,6 +37,7 @@ describe('ContestDetail', () => {
       startsAt: '2026-06-01T00:00:00+00:00',
       endsAt: '2026-07-01T00:00:00+00:00',
       participantCount: 2,
+      onchainInitializeTxSignature: '5'.repeat(88),
     })
     vi.mocked(connectSolanaWallet).mockReset()
     vi.mocked(connectSolanaWallet).mockResolvedValue({
@@ -157,6 +158,72 @@ describe('ContestDetail', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Joined')
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+    expect(joinContestOnchain).not.toHaveBeenCalled()
+  })
+
+  it('explains that Solana join is unavailable before on-chain initialization', async () => {
+    vi.mocked(fetchContest).mockResolvedValue({
+      id: 'practice-arena',
+      title: 'Practice Arena From API',
+      status: 'practice',
+      mode: 'practice',
+      initialCapital: 10000,
+      symbols: ['BTCUSDT'],
+      startsAt: '2026-06-01T00:00:00+00:00',
+      endsAt: '2026-07-01T00:00:00+00:00',
+      participantCount: 2,
+      onchainInitializeTxSignature: null,
+    })
+
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Contest is not initialized on Solana yet')
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+    expect(joinContestOnchain).not.toHaveBeenCalled()
+  })
+
+  it('blocks the admin wallet that initialized the contest from joining', async () => {
+    vi.mocked(fetchContest).mockResolvedValue({
+      id: 'practice-arena',
+      title: 'Practice Arena From API',
+      status: 'practice',
+      mode: 'practice',
+      initialCapital: 10000,
+      symbols: ['BTCUSDT'],
+      startsAt: '2026-06-01T00:00:00+00:00',
+      endsAt: '2026-07-01T00:00:00+00:00',
+      participantCount: 2,
+      onchainInitializeTxSignature: '5'.repeat(88),
+      onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    })
+    vi.mocked(connectSolanaWallet).mockResolvedValue({
+      walletAddress: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      walletName: 'Phantom',
+    })
+
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Admin wallet ExUB...J2NB')
+    expect(wrapper.text()).toContain('The admin wallet that initialized this contest cannot join it')
     await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
     expect(joinContestOnchain).not.toHaveBeenCalled()
   })

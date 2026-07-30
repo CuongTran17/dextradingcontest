@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.services.solana_join import (
+    AdminWalletCannotJoinContestError,
     SolanaRpcTransactionVerifier,
     SolanaJoinService,
     SolanaJoinVerificationError,
@@ -14,8 +15,9 @@ from src.services.solana_join import (
 
 
 class FakeRepo:
-    def __init__(self, participant=None):
+    def __init__(self, participant=None, onchain_admin_wallet=None):
         self.participant = participant
+        self.onchain_admin_wallet = onchain_admin_wallet
         self.created_participant = None
         self.created_account = None
         self.committed = False
@@ -31,6 +33,7 @@ class FakeRepo:
             ends_at=None,
             initial_balance=Decimal("10000"),
             quote_asset="USDT_TEST",
+            onchain_admin_wallet=self.onchain_admin_wallet,
         )
 
     def get_participant(self, contest_id, user_id):
@@ -135,6 +138,24 @@ def test_confirm_join_rejects_unverified_transaction():
             wallet_address="So11111111111111111111111111111111111111112",
             join_tx_signature="5" * 88,
         )
+
+
+def test_confirm_join_rejects_contest_admin_wallet():
+    repo = FakeRepo(
+        onchain_admin_wallet="ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB"
+    )
+    service = SolanaJoinService(repo, tx_verifier=lambda *_: True)
+
+    with pytest.raises(AdminWalletCannotJoinContestError):
+        service.confirm_join(
+            user_id=1,
+            contest_slug="summer-cup",
+            wallet_address="ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB",
+            join_tx_signature="5" * 88,
+        )
+
+    assert repo.created_participant is None
+    assert repo.committed is False
 
 
 def test_default_tx_verifier_rejects_without_rpc_configuration():
