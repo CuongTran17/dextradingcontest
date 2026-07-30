@@ -50,6 +50,22 @@ interface BackendAdminContestParticipant {
   last_trade: string | null
 }
 
+export interface CertificateExportResult {
+  contest_id: string
+  snapshot_hash: string
+  merkle_root: string
+  claims: Array<{
+    participant_id: number
+    wallet_address: string
+    rank: number
+    recipient_name: string
+    image_uri: string
+    metadata_uri: string
+    merkle_leaf: string
+    proof: string[]
+  }>
+}
+
 function adminHeaders(): HeadersInit {
   const token = getToken()
   if (!token) throw new Error('Please sign in as admin')
@@ -210,6 +226,19 @@ export async function setAdminContestParticipantStatus(
     },
   )
   return mapAdminContestParticipant(participant)
+}
+
+export async function exportContestCertificates(
+  contestId: string,
+): Promise<CertificateExportResult> {
+  return backendFetch<CertificateExportResult>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/certificates/export`,
+    {
+      method: 'POST',
+      headers: adminHeaders(),
+    },
+  )
 }
 
 function mapContest(contest: BackendContest): Contest {

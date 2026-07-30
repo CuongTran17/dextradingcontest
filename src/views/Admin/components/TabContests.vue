@@ -49,18 +49,53 @@
             <td class="px-3 py-3 text-gray-500 dark:text-gray-400">{{ contest.startsAt || '-' }} / {{ contest.endsAt || '-' }}</td>
             <td class="px-3 py-3 text-gray-700 dark:text-gray-300">{{ contest.participantCount }}</td>
             <td class="px-3 py-3">
-              <button
-                class="rounded border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-                type="button"
-                :data-test="`edit-contest-${contest.id}`"
-                @click="editContest(contest)"
-              >
-                Edit
-              </button>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  class="rounded border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  type="button"
+                  :data-test="`edit-contest-${contest.id}`"
+                  @click="editContest(contest)"
+                >
+                  Edit
+                </button>
+                <button
+                  class="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  type="button"
+                  :data-test="`export-certificates-${contest.id}`"
+                  :disabled="exportingContestId === contest.id"
+                  @click="exportCertificates(contest.id)"
+                >
+                  {{ exportingContestId === contest.id ? 'Exporting...' : 'Export Certificates' }}
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div
+      v-if="certificateExport"
+      class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100"
+    >
+      <p class="font-semibold">Certificates exported for {{ certificateExport.contest_id }}</p>
+      <dl class="mt-3 grid gap-3 lg:grid-cols-3">
+        <div>
+          <dt class="text-xs uppercase text-emerald-700 dark:text-emerald-300">Merkle root</dt>
+          <dd class="mt-1 break-all font-mono text-xs">{{ certificateExport.merkle_root }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase text-emerald-700 dark:text-emerald-300">Snapshot hash</dt>
+          <dd class="mt-1 break-all font-mono text-xs">{{ certificateExport.snapshot_hash }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase text-emerald-700 dark:text-emerald-300">Claims exported</dt>
+          <dd class="mt-1 font-semibold">Claims exported: {{ certificateExport.claims.length }}</dd>
+        </div>
+      </dl>
+      <p class="mt-3 break-all rounded border border-emerald-200 bg-white p-3 font-mono text-xs dark:border-emerald-900 dark:bg-gray-950">
+        {{ publishRootCommand }}
+      </p>
     </div>
 
     <form
@@ -127,13 +162,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import {
   createAdminCryptoContest,
+  exportContestCertificates,
   fetchAdminCryptoContests,
   setAdminCryptoContestStatus,
   updateAdminCryptoContest,
+  type CertificateExportResult,
 } from '@/services/cryptoContestApi'
 import type { Contest, CryptoSymbol, RawContestStatus } from '@/types/crypto'
 
@@ -141,6 +178,8 @@ const contests = ref<Contest[]>([])
 const loading = ref(false)
 const error = ref('')
 const editingContestId = ref('')
+const exportingContestId = ref('')
+const certificateExport = ref<CertificateExportResult | null>(null)
 const form = ref({
   slug: '',
   title: '',
@@ -213,6 +252,18 @@ async function changeStatus(contest: Contest, status: RawContestStatus) {
   }
 }
 
+async function exportCertificates(contestId: string) {
+  exportingContestId.value = contestId
+  error.value = ''
+  try {
+    certificateExport.value = await exportContestCertificates(contestId)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unable to export certificates'
+  } finally {
+    exportingContestId.value = ''
+  }
+}
+
 onMounted(loadContests)
 
 function editContest(contest: Contest) {
@@ -258,4 +309,14 @@ function formatCurrency(value: number): string {
     maximumFractionDigits: 0,
   }).format(value)
 }
+
+const publishRootCommand = computed(() => {
+  if (!certificateExport.value) return ''
+  return [
+    'npm run admin -- publish-certificate-root',
+    certificateExport.value.contest_id,
+    certificateExport.value.merkle_root,
+    certificateExport.value.snapshot_hash,
+  ].join(' ')
+})
 </script>

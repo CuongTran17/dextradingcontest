@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createAdminCryptoContest,
+  exportContestCertificates,
   fetchAdminContestParticipants,
   fetchContest,
   fetchContestLeaderboard,
@@ -145,5 +146,38 @@ describe('cryptoContestApi', () => {
 
     expect((await fetchAdminContestParticipants('practice-arena'))[0].accountStatus).toBe('active')
     expect((await setAdminContestParticipantStatus('practice-arena', 2, 'locked')).status).toBe('locked')
+  })
+
+  it('exports contest certificates with bearer auth', async () => {
+    vi.mocked(backendFetch).mockResolvedValue({
+      contest_id: 'summer-cup',
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      claims: [
+        {
+          participant_id: 1,
+          wallet_address: 'So11111111111111111111111111111111111111112',
+          rank: 1,
+          recipient_name: 'Alice',
+          image_uri: 'ipfs://QmImage',
+          metadata_uri: 'ipfs://QmMetadata',
+          merkle_leaf: 'cc'.repeat(32),
+          proof: [],
+        },
+      ],
+    })
+
+    const result = await exportContestCertificates('summer-cup')
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      '/api/admin/crypto/contests/summer-cup/certificates/export',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer token-123' },
+      },
+    )
+    expect(result.merkle_root).toBe('bb'.repeat(32))
+    expect(result.claims).toHaveLength(1)
   })
 })

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TabContests from '@/views/Admin/components/TabContests.vue'
 import {
   createAdminCryptoContest,
+  exportContestCertificates,
   fetchAdminCryptoContests,
   setAdminCryptoContestStatus,
   updateAdminCryptoContest,
@@ -12,6 +13,7 @@ import type { Contest } from '@/types/crypto'
 
 vi.mock('@/services/cryptoContestApi', () => ({
   createAdminCryptoContest: vi.fn(),
+  exportContestCertificates: vi.fn(),
   fetchAdminCryptoContests: vi.fn(),
   setAdminCryptoContestStatus: vi.fn(),
   updateAdminCryptoContest: vi.fn(),
@@ -34,6 +36,7 @@ describe('TabContests', () => {
   beforeEach(() => {
     vi.mocked(fetchAdminCryptoContests).mockReset()
     vi.mocked(createAdminCryptoContest).mockReset()
+    vi.mocked(exportContestCertificates).mockReset()
     vi.mocked(updateAdminCryptoContest).mockReset()
     vi.mocked(setAdminCryptoContestStatus).mockReset()
     vi.mocked(fetchAdminCryptoContests).mockResolvedValue([contest])
@@ -91,5 +94,36 @@ describe('TabContests', () => {
         symbols: ['BTCUSDT', 'SOLUSDT'],
       }),
     )
+  })
+
+  it('exports contest certificates and displays root publishing details', async () => {
+    vi.mocked(exportContestCertificates).mockResolvedValue({
+      contest_id: 'summer-cup',
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      claims: [
+        {
+          participant_id: 1,
+          wallet_address: 'So11111111111111111111111111111111111111112',
+          rank: 1,
+          recipient_name: 'Alice',
+          image_uri: 'ipfs://QmImage',
+          metadata_uri: 'ipfs://QmMetadata',
+          merkle_leaf: 'cc'.repeat(32),
+          proof: [],
+        },
+      ],
+    })
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="export-certificates-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup')
+    expect(wrapper.text()).toContain('Merkle root')
+    expect(wrapper.text()).toContain('bb'.repeat(32))
+    expect(wrapper.text()).toContain('Claims exported: 1')
+    expect(wrapper.text()).toContain('npm run admin -- publish-certificate-root summer-cup')
   })
 })
