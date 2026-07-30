@@ -361,3 +361,15 @@ solana program set-upgrade-authority <PROGRAM_ID> --final --url devnet
 - Anchor CLI: https://www.anchor-lang.com/docs/references/cli
 - Solana faucet: https://faucet.solana.com/
 - Solana deploy docs: https://solana.com/docs/programs/deploying
+
+## Admin Script Smoke-Test Record
+
+Latest devnet smoke test:
+
+```text
+CONTEST_ID=smoke-1785407205
+INITIALIZE_SIGNATURE=4NvYMsNo9z4xnLm7i7Qco2an5iCh4XC8FNsQPRUzte6mqmzdikeFCS3nAjKdHNDfvvYQ5G4BaJ3x6A8AqbCPmEA
+DISABLE_JOIN_SIGNATURE=4vraNf7Ae5qv8QWhSgTy36ohBJGJ7GMBJ7fQ1ypKuZhHgAacCfB9JdeP9rtUYnHwBTx4H31PXv5w3gvHbQNLKt9n
+ENABLE_JOIN_SIGNATURE=eCuAsCnQhkV6pCfspM6XxS6iJFZ3F5q7BELETJmtX1sxcAFWP8kixDHNBWcePvWHL6BbdemHCW2aZNUE6VkMPyj
+PUBLISH_ROOT_SIGNATURE=3ftw6jTyAzThNk5bgeXMMcKiBPjhrzWJ4dXxXa91rFa5mUUR2s8fuWo48DyCn1Kt9JKwroJhzWKAg7aKZT5HVV8T
+```
