@@ -26,7 +26,7 @@ features have been removed from the runtime. Their frontend code is retained und
 - Admin contest settlement with pending-order cancellation, mark-to-market final equity, final ranking, audit events, and snapshot hashes.
 - Solana devnet contest join proof with wallet connect UI, on-chain `join_contest`, and backend wallet locking.
 - Anchor contest program deployed on devnet at `9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx`.
-- Solana admin CLI for initializing contests, toggling on-chain joins, and publishing certificate Merkle roots.
+- Solana admin UI flow for initializing contests, with CLI fallback for join toggles and certificate Merkle roots.
 - Top-10 certificate export model with PNG certificate rendering, Pinata image/metadata upload, and deterministic Merkle proofs.
 - Dedicated DuckDB warehouse with a rolling year of `1m` Spot candles.
 - Materialized `5m`, `15m`, `1h`, and `4h` candles generated from canonical `1m` data.
@@ -192,7 +192,9 @@ The current devnet program is:
 contest_nft: 9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx
 ```
 
-Initialize a contest PDA before users join on-chain:
+Preferred flow: sign in as an admin, open `/admin?tab=contests`, create a contest whose slug is 32 bytes or shorter, then click `Initialize on Solana` and approve the devnet wallet transaction. The row records the contest PDA, transaction signature, and initializing admin wallet after backend confirmation. The same admin wallet is displayed on the contest detail page and cannot join that contest as a participant.
+
+CLI fallback for initializing a contest PDA:
 
 ```bash
 ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
@@ -262,6 +264,7 @@ GET  /api/admin/crypto/contests
 POST /api/admin/crypto/contests
 PUT  /api/admin/crypto/contests/{contest_id}
 PUT  /api/admin/crypto/contests/{contest_id}/status
+POST /api/admin/crypto/contests/{contest_id}/onchain/confirm
 POST /api/admin/crypto/contests/{contest_id}/settle
 POST /api/admin/crypto/contests/{contest_id}/resettle
 GET  /api/admin/crypto/contests/{contest_id}/settlement
@@ -278,11 +281,13 @@ PUT  /api/admin/crypto/contests/{contest_id}/participants/{user_id}/status?statu
 - Admin contest APIs live under `/api/admin/crypto/contests` and require an admin JWT.
 - Admin dashboard APIs live under `/api/admin/crypto/overview` and `/api/admin/crypto/accounts`.
 - Admins can create contests and change contest status, but cannot edit user trading results.
+- Admins initialize new contests on Solana from the admin UI; the backend stores only confirmed PDA metadata and never stores admin private keys.
 - Admins can observe account balances, positions, orders, fills, equity, PnL, and ROI.
 - Admins must not edit account balances, positions, orders, fills, PnL, or leaderboard results directly.
 - Admins can list contest participants and set participant status to active, locked, or disqualified.
 - Locked or disqualified participants have their trading account frozen for that contest.
 - Users can connect a Solana wallet and submit an on-chain `join_contest` transaction.
+- Users cannot join on Solana until the backend records the contest initialize transaction, and the initializing admin wallet is blocked from joining that same contest.
 - The backend verifies the join transaction and locks one Solana wallet address per user per contest.
 
 ### Contest Settlement

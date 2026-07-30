@@ -192,7 +192,7 @@ Backend `backend_v2/.env`:
 
 ```env
 SOLANA_RPC_URL=https://api.devnet.solana.com
-SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
+SOLANA_CONTEST_PROGRAM_ID=9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx
 PINATA_JWT=<PINATA_JWT_CUA_BAN>
 PINATA_GATEWAY_URL=https://gateway.pinata.cloud/ipfs
 ```
@@ -202,7 +202,7 @@ Frontend Vite env, neu repo dung file `.env` o root:
 ```env
 VITE_SOLANA_CLUSTER=devnet
 VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
-VITE_SOLANA_CONTEST_PROGRAM_ID=<PROGRAM_ID>
+VITE_SOLANA_CONTEST_PROGRAM_ID=9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx
 ```
 
 Hien backend da co `SOLANA_RPC_URL`, `SOLANA_CONTEST_PROGRAM_ID`, `PINATA_JWT`, `PINATA_GATEWAY_URL` trong `backend_v2/.env.example`.
@@ -211,13 +211,26 @@ Hien backend da co `SOLANA_RPC_URL`, `SOLANA_CONTEST_PROGRAM_ID`, `PINATA_JWT`, 
 
 Sau khi deploy, moi contest can duoc initialize on-chain truoc khi user join.
 
-Run from WSL:
+### Admin UI flow
+
+1. Open `/admin?tab=contests`.
+2. Create a contest with a slug of 32 bytes or less.
+3. Click `Initialize on Solana`.
+4. Confirm the Phantom/Solflare devnet transaction.
+5. Wait for the row to show `On-chain ready` and `Admin wallet <short-address>`.
+6. Open the contest detail page and confirm it shows the same admin wallet.
+7. Connect the same admin wallet and confirm the UI shows `The admin wallet that initialized this contest cannot join it`.
+8. Connect a different Solana wallet; that wallet can now join the contest on Solana.
+
+### CLI fallback
+
+Use the CLI when the admin browser wallet flow is unavailable or for smoke tests:
 
 ```bash
 cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
 ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
 ANCHOR_WALLET=~/.config/solana/contest-devnet.json \
-npm run admin -- initialize-contest practice-arena
+npm run admin -- initialize-contest <contest_id>
 ```
 
 Enable joins:
