@@ -59,6 +59,17 @@ class CertificateClaimConfirmRequest(BaseModel):
     mint_tx_signature: str = Field(min_length=32, max_length=128)
 
 
+class SolanaFaucetClaimRequest(BaseModel):
+    wallet_address: str = Field(min_length=32, max_length=64)
+
+
+class SolanaFaucetClaimResponse(BaseModel):
+    wallet_address: str
+    amount_lamports: int
+    tx_signature: str
+    claimed_at: str
+
+
 class ContestResponse(BaseModel):
     id: str
     title: str

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
     solana_rpc_url: str | None = None
     solana_contest_program_id: str | None = None
+    solana_faucet_private_key: str | None = None
+    solana_faucet_amount_lamports: int = Field(default=10_000_000, ge=1)
+    solana_faucet_cooldown_hours: int = Field(default=24, ge=1, le=24 * 30)
 
     pinata_jwt: str | None = None
     pinata_gateway_url: str = "https://gateway.pinata.cloud/ipfs"

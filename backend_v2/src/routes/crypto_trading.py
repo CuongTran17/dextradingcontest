@@ -1,7 +1,8 @@
 import json
+import hashlib
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from src.api.auth import require_auth
@@ -15,6 +16,8 @@ from src.schemas.crypto_trading import (
     ContestWalletResponse,
     MarketOrderCreate,
     OrderResponse,
+    SolanaFaucetClaimRequest,
+    SolanaFaucetClaimResponse,
     SolanaJoinConfirmRequest,
     TradingAccountResponse,
 )
@@ -42,6 +45,11 @@ from src.services.solana_join import (
     SolanaJoinService,
     SolanaJoinVerificationError,
     WalletAlreadyBoundError,
+)
+from src.services.solana_faucet import (
+    FaucetCooldownError,
+    FaucetUnavailableError,
+    SolanaFaucetService,
 )
 from src.settings import get_settings
 
@@ -104,6 +112,17 @@ def get_solana_join_service(
             settings.solana_rpc_url,
             settings.solana_contest_program_id,
         ),
+    )
+
+
+def get_solana_faucet_service(
+    db: Session = Depends(get_db),
+) -> SolanaFaucetService:
+    settings = get_settings()
+    return SolanaFaucetService(
+        CryptoTradingRepository(db),
+        amount_lamports=settings.solana_faucet_amount_lamports,
+        cooldown_hours=settings.solana_faucet_cooldown_hours,
     )
 
 
@@ -229,6 +248,26 @@ def confirm_my_certificate_claim(
     )
     repo.commit()
     return certificate_claim_response(contest_id, claim)
+
+
+@router.post(
+    "/wallet/faucet",
+    response_model=SolanaFaucetClaimResponse,
+)
+def claim_solana_faucet(
+    body: SolanaFaucetClaimRequest,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    service: SolanaFaucetService = Depends(get_solana_faucet_service),
+):
+    client_host = request.client.host if request.client else "unknown"
+    ip_hash = hashlib.sha256(client_host.encode("utf-8")).hexdigest()
+    try:
+        return service.claim(current_user.id, body.wallet_address, ip_hash)
+    except FaucetCooldownError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except FaucetUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
 
 
 @router.get(

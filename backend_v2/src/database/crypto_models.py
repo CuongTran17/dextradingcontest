@@ -393,6 +393,25 @@ class CryptoCertificateClaim(Base):
     participant = relationship("ContestParticipant")
 
 
+class CryptoFaucetClaim(Base):
+    __tablename__ = "crypto_faucet_claims"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    wallet_address = Column(String(64), nullable=False, index=True)
+    amount_lamports = Column(BigInteger, nullable=False)
+    tx_signature = Column(String(128), nullable=False)
+    ip_hash = Column(String(64), nullable=False)
+    claimed_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    user = relationship("User")
+
+
 class CryptoAccountEvent(Base):
     __tablename__ = "crypto_account_events"
 

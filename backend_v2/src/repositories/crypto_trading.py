@@ -13,6 +13,7 @@ from src.database.crypto_models import (
     CryptoAsset,
     CryptoCertificateClaim,
     CryptoContestSettlement,
+    CryptoFaucetClaim,
     CryptoOrderEvent,
     Position,
     TradeFill,
@@ -522,6 +523,25 @@ class CryptoTradingRepository:
         claim.mint_address = mint_address
         claim.mint_tx_signature = mint_tx_signature
         claim.claimed_at = claimed_at
+        return claim
+
+    def get_latest_faucet_claim(
+        self,
+        user_id: int,
+        wallet_address: str,
+    ) -> CryptoFaucetClaim | None:
+        return (
+            self.db.query(CryptoFaucetClaim)
+            .filter(
+                CryptoFaucetClaim.user_id == user_id,
+                CryptoFaucetClaim.wallet_address == wallet_address,
+            )
+            .order_by(CryptoFaucetClaim.claimed_at.desc(), CryptoFaucetClaim.id.desc())
+            .first()
+        )
+
+    def add_faucet_claim(self, claim: CryptoFaucetClaim) -> CryptoFaucetClaim:
+        self.db.add(claim)
         return claim
 
     def add_account_event(self, event: CryptoAccountEvent) -> CryptoAccountEvent:
