@@ -209,7 +209,42 @@ Hien backend da co `SOLANA_RPC_URL`, `SOLANA_CONTEST_PROGRAM_ID`, `PINATA_JWT`, 
 
 ## 9. Initialize Contest On-chain
 
-Sau khi deploy, moi contest can duoc initialize on-chain truoc khi user join. Hien repo chua co checked-in script rieng cho admin instruction, nen buoc nay se duoc them sau khi client script hoan tat.
+Sau khi deploy, moi contest can duoc initialize on-chain truoc khi user join.
+
+Run from WSL:
+
+```bash
+cd /mnt/c/Users/Lenovo/Downloads/crypto-dex-trading-contest/solana
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/contest-devnet.json \
+npm run admin -- initialize-contest practice-arena
+```
+
+Enable joins:
+
+```bash
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/contest-devnet.json \
+npm run admin -- set-join-enabled practice-arena true
+```
+
+Disable joins:
+
+```bash
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/contest-devnet.json \
+npm run admin -- set-join-enabled practice-arena false
+```
+
+Publish certificate root after backend export:
+
+```bash
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/contest-devnet.json \
+npm run admin -- publish-certificate-root practice-arena <MERKLE_ROOT_HEX> <SNAPSHOT_HASH_HEX>
+```
+
+The script prints `signature=<TX_SIGNATURE>` when the transaction succeeds.
 
 Flow du kien:
 
@@ -222,14 +257,6 @@ Flow du kien:
 6. Backend settle contest, export top-10 certificate, upload Pinata.
 7. Admin publish_certificate_root(root, snapshot_hash).
 8. User claim/mint certificate NFT.
-```
-
-Khi can chay admin instruction ngay, bao Codex tao `solana/scripts/admin.ts` de goi:
-
-```text
-initialize_contest
-set_join_enabled
-publish_certificate_root
 ```
 
 ## 10. Testnet Tuy Chon
