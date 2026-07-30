@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   claimCertificateOnchain,
   connectSolanaWallet,
+  joinContestOnchain,
 } from '@/services/solanaWallet'
 
 describe('solanaWallet', () => {
@@ -28,6 +29,31 @@ describe('solanaWallet', () => {
 
   it('asks the user to install a Solana wallet when no provider exists', async () => {
     await expect(connectSolanaWallet()).rejects.toThrow('Install Phantom or Solflare')
+  })
+
+  it('explains when the contest has not been initialized on-chain', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue(null)
+    vi.spyOn(Connection.prototype, 'getBalance').mockResolvedValue(1_000_000_000)
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
+      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+
+    const signAndSendTransaction = vi.fn()
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: wallet }),
+      signAndSendTransaction,
+    }
+
+    await expect(
+      joinContestOnchain({
+        contestId: 'summer-cup',
+        walletPublicKey: wallet.toBase58(),
+      }),
+    ).rejects.toThrow('Contest summer-cup is not initialized on Solana devnet')
+    expect(signAndSendTransaction).not.toHaveBeenCalled()
   })
 
   it('rejects certificate claim when snapshot hash is not 32 bytes', async () => {

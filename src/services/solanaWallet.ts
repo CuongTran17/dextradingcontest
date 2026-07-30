@@ -8,6 +8,7 @@ import {
 import { Buffer } from 'buffer'
 
 const DEFAULT_SOLANA_RPC_URL = 'https://api.devnet.solana.com'
+const MIN_JOIN_BALANCE_LAMPORTS = 5_000_000
 const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254, 100, 133])
 const CLAIM_CERTIFICATE_DISCRIMINATOR = Uint8Array.from([45, 124, 106, 139, 156, 89, 153, 233])
 const textEncoder = new TextEncoder()
@@ -103,6 +104,7 @@ export async function joinContestOnchain(
     programId,
   )[0]
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  await assertJoinPrerequisites(connection, input.contestId, contest, wallet)
   const transaction = new Transaction().add(
     new TransactionInstruction({
       programId,
@@ -120,6 +122,25 @@ export async function joinContestOnchain(
 
   const { signature } = await signAndConfirm(provider, connection, transaction)
   return { walletAddress: wallet.toBase58(), signature }
+}
+
+async function assertJoinPrerequisites(
+  connection: Connection,
+  contestId: string,
+  contest: PublicKey,
+  wallet: PublicKey,
+): Promise<void> {
+  const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
+  if (!contestAccount) {
+    throw new Error(
+      `Contest ${contestId} is not initialized on Solana devnet. Ask an admin to run initialize-contest for this contest id.`,
+    )
+  }
+
+  const balance = await connection.getBalance(wallet, 'confirmed')
+  if (balance < MIN_JOIN_BALANCE_LAMPORTS) {
+    throw new Error('Your Solana devnet wallet needs SOL before joining this contest')
+  }
 }
 
 export async function claimCertificateOnchain(
