@@ -133,6 +133,29 @@ class CryptoContestService:
         self.repository.commit()
         return self._map_contest(contest)
 
+    def confirm_onchain_initialize(
+        self,
+        contest_slug: str,
+        contest_address: str,
+        initialize_tx_signature: str,
+        admin_wallet: str,
+    ) -> dict:
+        contest = self.repository.get_contest_by_slug(contest_slug)
+        if contest is None:
+            raise ContestNotFoundError(f"Contest '{contest_slug}' not found")
+        if contest.onchain_initialize_tx_signature:
+            raise ContestValidationError("Contest is already initialized on-chain")
+
+        self.repository.mark_contest_onchain_initialized(
+            contest,
+            contest_address,
+            initialize_tx_signature,
+            admin_wallet,
+            datetime.now(timezone.utc),
+        )
+        self.repository.commit()
+        return self._map_contest(contest)
+
     def get_leaderboard(self, slug: str, force_refresh: bool = False) -> list[dict]:
         now = time.monotonic()
         if not force_refresh and slug in _LEADERBOARD_CACHE:

@@ -31,6 +31,12 @@ class SolanaJoinConfirmRequest(BaseModel):
     join_tx_signature: str = Field(min_length=32, max_length=128)
 
 
+class ContestOnchainInitializeConfirmRequest(BaseModel):
+    contest_address: str = Field(min_length=32, max_length=64)
+    initialize_tx_signature: str = Field(min_length=32, max_length=128)
+    admin_wallet: str = Field(min_length=32, max_length=64)
+
+
 class ContestWalletResponse(BaseModel):
     contest_id: str
     wallet_address: str | None

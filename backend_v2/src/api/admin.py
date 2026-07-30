@@ -7,7 +7,11 @@ from src.api.auth import require_role
 from src.database.db import get_db
 from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
-from src.schemas.crypto_trading import ContestCreate, ContestUpdate
+from src.schemas.crypto_trading import (
+    ContestCreate,
+    ContestOnchainInitializeConfirmRequest,
+    ContestUpdate,
+)
 from src.services.crypto_contests import (
     ContestNotFoundError,
     ContestValidationError,
@@ -263,6 +267,27 @@ def admin_set_crypto_contest_status(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ContestValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/crypto/contests/{contest_id}/onchain/confirm")
+def admin_confirm_crypto_contest_onchain_initialize(
+    contest_id: str,
+    body: ContestOnchainInitializeConfirmRequest,
+    current_user: User = Depends(_require_admin),
+    service: CryptoContestService = Depends(get_crypto_contest_service),
+):
+    del current_user
+    try:
+        return service.confirm_onchain_initialize(
+            contest_id,
+            body.contest_address,
+            body.initialize_tx_signature,
+            body.admin_wallet,
+        )
+    except ContestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ContestValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/crypto/contests/{contest_id}/settle")
