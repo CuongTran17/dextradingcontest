@@ -3,20 +3,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TabContests from '@/views/Admin/components/TabContests.vue'
 import {
+  confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
   fetchAdminCryptoContests,
   setAdminCryptoContestStatus,
   updateAdminCryptoContest,
 } from '@/services/cryptoContestApi'
+import { initializeContestOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 vi.mock('@/services/cryptoContestApi', () => ({
+  confirmContestOnchainInitialize: vi.fn(),
   createAdminCryptoContest: vi.fn(),
   exportContestCertificates: vi.fn(),
   fetchAdminCryptoContests: vi.fn(),
   setAdminCryptoContestStatus: vi.fn(),
   updateAdminCryptoContest: vi.fn(),
+}))
+
+vi.mock('@/services/solanaWallet', () => ({
+  initializeContestOnchain: vi.fn(),
 }))
 
 const contest: Contest = {
@@ -36,7 +43,9 @@ describe('TabContests', () => {
   beforeEach(() => {
     vi.mocked(fetchAdminCryptoContests).mockReset()
     vi.mocked(createAdminCryptoContest).mockReset()
+    vi.mocked(confirmContestOnchainInitialize).mockReset()
     vi.mocked(exportContestCertificates).mockReset()
+    vi.mocked(initializeContestOnchain).mockReset()
     vi.mocked(updateAdminCryptoContest).mockReset()
     vi.mocked(setAdminCryptoContestStatus).mockReset()
     vi.mocked(fetchAdminCryptoContests).mockResolvedValue([contest])
@@ -149,5 +158,35 @@ describe('TabContests', () => {
     expect(wrapper.text()).toContain('bb'.repeat(32))
     expect(wrapper.text()).toContain('Claims exported: 1')
     expect(wrapper.text()).toContain('npm run admin -- publish-certificate-root summer-cup')
+  })
+
+  it('initializes a contest on Solana from the admin table', async () => {
+    vi.mocked(initializeContestOnchain).mockResolvedValue({
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      signature: '5'.repeat(88),
+    })
+    vi.mocked(confirmContestOnchainInitialize).mockResolvedValue({
+      ...contest,
+      onchainContestAddress: 'ContestPda1111111111111111111111111111111',
+      onchainInitializeTxSignature: '5'.repeat(88),
+      onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      onchainInitializedAt: '2026-07-30T10:00:00+00:00',
+    })
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="initialize-onchain-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(initializeContestOnchain).toHaveBeenCalledWith({ contestId: 'summer-cup' })
+    expect(confirmContestOnchainInitialize).toHaveBeenCalledWith({
+      contestId: 'summer-cup',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      initializeTxSignature: '5'.repeat(88),
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    })
+    expect(wrapper.text()).toContain('On-chain ready')
+    expect(wrapper.text()).toContain('ExUB...J2NB')
   })
 })

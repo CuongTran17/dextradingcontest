@@ -59,6 +59,29 @@
                   Edit
                 </button>
                 <button
+                  v-if="!contest.onchainInitializeTxSignature"
+                  class="rounded border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950"
+                  type="button"
+                  :data-test="`initialize-onchain-${contest.id}`"
+                  :disabled="initializingContestId === contest.id"
+                  @click="initializeOnchain(contest.id)"
+                >
+                  {{ initializingContestId === contest.id ? 'Initializing...' : 'Initialize on Solana' }}
+                </button>
+                <span
+                  v-else
+                  class="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                >
+                  On-chain ready
+                </span>
+                <span
+                  v-if="contest.onchainAdminWallet"
+                  class="text-xs text-gray-500 dark:text-gray-400"
+                  :title="contest.onchainAdminWallet"
+                >
+                  Admin wallet {{ shortAddress(contest.onchainAdminWallet) }}
+                </span>
+                <button
                   class="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950"
                   type="button"
                   :data-test="`export-certificates-${contest.id}`"
@@ -165,6 +188,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
   fetchAdminCryptoContests,
@@ -172,6 +196,7 @@ import {
   updateAdminCryptoContest,
   type CertificateExportResult,
 } from '@/services/cryptoContestApi'
+import { initializeContestOnchain } from '@/services/solanaWallet'
 import type { Contest, CryptoSymbol, RawContestStatus } from '@/types/crypto'
 
 const contests = ref<Contest[]>([])
@@ -179,6 +204,7 @@ const loading = ref(false)
 const error = ref('')
 const editingContestId = ref('')
 const exportingContestId = ref('')
+const initializingContestId = ref('')
 const certificateExport = ref<CertificateExportResult | null>(null)
 const form = ref({
   slug: '',
@@ -267,6 +293,25 @@ async function exportCertificates(contestId: string) {
   }
 }
 
+async function initializeOnchain(contestId: string) {
+  initializingContestId.value = contestId
+  error.value = ''
+  try {
+    const onchain = await initializeContestOnchain({ contestId })
+    const updated = await confirmContestOnchainInitialize({
+      contestId,
+      contestAddress: onchain.contestAddress,
+      initializeTxSignature: onchain.signature,
+      adminWallet: onchain.adminWallet,
+    })
+    contests.value = contests.value.map((item) => (item.id === updated.id ? updated : item))
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unable to initialize contest on Solana'
+  } finally {
+    initializingContestId.value = ''
+  }
+}
+
 onMounted(loadContests)
 
 function editContest(contest: Contest) {
@@ -319,6 +364,10 @@ function formatCurrency(value: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 4)}...${address.slice(-4)}`
 }
 
 const publishRootCommand = computed(() => {
