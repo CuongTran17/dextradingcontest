@@ -13,6 +13,7 @@
 - Target chain is Solana devnet for this MVP.
 - Backend must never store or use admin private keys.
 - `initialize_contest` must be signed by the admin wallet in Phantom/Solflare.
+- The wallet stored as `onchain_admin_wallet` for a contest must be visible in admin contest rows and must not be allowed to join that same contest.
 - Contest PDA seed is `[b"contest", contest_id.as_bytes()]`.
 - Contest ids must continue to satisfy backend slug pattern `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
 - Solana program enforces `MAX_CONTEST_ID_LEN = 32`.
@@ -37,10 +38,12 @@
 - `src/types/crypto.ts`: extend `Contest` with on-chain state.
 - `src/services/cryptoContestApi.ts`: add `confirmContestOnchainInitialize`.
 - `src/services/__tests__/cryptoContestApi.test.ts`: verify confirm API payload.
-- `src/views/Admin/components/TabContests.vue`: add UI button/status for `Initialize on Solana`.
-- `src/views/Admin/__tests__/TabContests.test.ts`: verify UI flow.
-- `src/views/ContestDetail.vue`: show on-chain-ready status and disable/clarify Solana join when backend says not initialized.
-- `src/views/__tests__/ContestDetail.test.ts`: verify user-facing guard.
+- `backend_v2/src/services/solana_join.py`: reject Solana join confirmations where the joining wallet equals `contest.onchain_admin_wallet`.
+- `backend_v2/tests/test_solana_join_service.py`: verify admin wallet cannot join the contest it initialized.
+- `src/views/Admin/components/TabContests.vue`: add UI button/status for `Initialize on Solana` and display the initializing admin wallet.
+- `src/views/Admin/__tests__/TabContests.test.ts`: verify UI flow and admin wallet display.
+- `src/views/ContestDetail.vue`: show on-chain-ready status, show admin wallet, and disable/clarify Solana join when backend says not initialized or the connected wallet is the admin wallet.
+- `src/views/__tests__/ContestDetail.test.ts`: verify user-facing guard for missing on-chain init and blocked admin wallet.
 - `docs/solana-devnet-deployment.md`: document admin UI flow and CLI fallback.
 
 ### Task 1: Frontend Admin Initialize Transaction
@@ -865,6 +868,7 @@ it('initializes a contest on Solana from the admin table', async () => {
     adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
   })
   expect(wrapper.text()).toContain('On-chain ready')
+  expect(wrapper.text()).toContain('ExUB...J2NB')
 })
 ```
 
@@ -914,6 +918,21 @@ In Actions cell, add:
 >
   On-chain ready
 </span>
+<span
+  v-if="contest.onchainAdminWallet"
+  class="text-xs text-gray-500 dark:text-gray-400"
+  :title="contest.onchainAdminWallet"
+>
+  Admin wallet {{ shortAddress(contest.onchainAdminWallet) }}
+</span>
+```
+
+Add helper:
+
+```ts
+function shortAddress(address: string): string {
+  return `${address.slice(0, 4)}...${address.slice(-4)}`
+}
 ```
 
 - [ ] **Step 5: Add method**
@@ -961,15 +980,107 @@ git commit -m "feat: initialize contests on solana from admin"
 ### Task 6: User Join Guard Uses Backend On-chain State
 
 **Files:**
+- Modify: `backend_v2/src/services/solana_join.py`
+- Modify: `backend_v2/tests/test_solana_join_service.py`
 - Modify: `src/views/ContestDetail.vue`
 - Modify: `src/views/__tests__/ContestDetail.test.ts`
 
 **Interfaces:**
 - Consumes `contest.onchainInitializeTxSignature`.
+- Consumes `contest.onchainAdminWallet`.
 - If missing, show `Contest is not initialized on Solana yet`.
-- Disable `Join on Solana` action until initialized.
+- If the active Solana wallet equals `contest.onchainAdminWallet`, show `The admin wallet that initialized this contest cannot join it`.
+- Disable `Join on Solana` action until initialized and for the initializing admin wallet.
+- Backend `SolanaJoinService.confirm_join(...)` raises `AdminWalletCannotJoinContestError` before transaction verification when `wallet_address == contest.onchain_admin_wallet`.
 
-- [ ] **Step 1: Write failing user guard test**
+- [ ] **Step 1: Write failing backend guard test**
+
+Append to `backend_v2/tests/test_solana_join_service.py` imports:
+
+```py
+from src.services.solana_join import AdminWalletCannotJoinContestError
+```
+
+Change `FakeRepo` to accept an admin wallet:
+
+```py
+class FakeRepo:
+    def __init__(self, participant=None, onchain_admin_wallet=None):
+        self.participant = participant
+        self.onchain_admin_wallet = onchain_admin_wallet
+        self.created_participant = None
+        self.created_account = None
+        self.committed = False
+```
+
+In `FakeRepo.get_active_contest`, add:
+
+```py
+onchain_admin_wallet=self.onchain_admin_wallet,
+```
+
+Add test:
+
+```py
+def test_confirm_join_rejects_contest_admin_wallet():
+    repo = FakeRepo(
+        onchain_admin_wallet="ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB"
+    )
+    service = SolanaJoinService(repo, tx_verifier=lambda *_: True)
+
+    with pytest.raises(AdminWalletCannotJoinContestError):
+        service.confirm_join(
+            user_id=1,
+            contest_slug="summer-cup",
+            wallet_address="ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB",
+            join_tx_signature="5" * 88,
+        )
+
+    assert repo.created_participant is None
+    assert repo.committed is False
+```
+
+- [ ] **Step 2: Run backend test to verify it fails**
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_solana_join_service.py::test_confirm_join_rejects_contest_admin_wallet -q
+```
+
+Expected: FAIL because `AdminWalletCannotJoinContestError` and the join guard do not exist.
+
+- [ ] **Step 3: Implement backend guard**
+
+In `backend_v2/src/services/solana_join.py`, add:
+
+```py
+class AdminWalletCannotJoinContestError(SolanaJoinError):
+    pass
+```
+
+In `SolanaJoinService.confirm_join`, immediately after `contest = self._get_joinable_contest(contest_slug)`, add:
+
+```py
+if getattr(contest, "onchain_admin_wallet", None) == wallet_address:
+    raise AdminWalletCannotJoinContestError(
+        "The admin wallet that initialized this contest cannot join it"
+    )
+```
+
+This guard must run before `self.tx_verifier(...)` so the backend rejects the wallet without asking the user to sign or inspecting a transaction.
+
+- [ ] **Step 4: Run backend test**
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_solana_join_service.py -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Write failing user guard tests**
 
 Append to `src/views/__tests__/ContestDetail.test.ts`:
 
@@ -1005,9 +1116,49 @@ it('explains that Solana join is unavailable before on-chain initialization', as
   await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
   expect(joinContestOnchain).not.toHaveBeenCalled()
 })
+
+it('blocks the admin wallet that initialized the contest from joining', async () => {
+  vi.mocked(fetchContest).mockResolvedValue({
+    id: 'summer-cup',
+    title: 'Summer Cup',
+    status: 'upcoming',
+    mode: 'contest',
+    initialCapital: 10000,
+    symbols: ['BTCUSDT'],
+    startsAt: '',
+    endsAt: '',
+    participantCount: 0,
+    onchainInitializeTxSignature: '5'.repeat(88),
+    onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+  })
+  vi.mocked(connectSolanaWallet).mockResolvedValue({
+    walletAddress: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    walletName: 'Phantom',
+  })
+
+  const wrapper = mount(ContestDetail, {
+    global: {
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a :href="to"><slot /></a>',
+        },
+      },
+    },
+  })
+
+  await flushPromises()
+  await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+  await flushPromises()
+
+  expect(wrapper.text()).toContain('Admin wallet ExUB...J2NB')
+  expect(wrapper.text()).toContain('The admin wallet that initialized this contest cannot join it')
+  await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+  expect(joinContestOnchain).not.toHaveBeenCalled()
+})
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 6: Run frontend test to verify it fails**
 
 Run:
 
@@ -1015,49 +1166,70 @@ Run:
 npm.cmd run test:unit -- src/views/__tests__/ContestDetail.test.ts
 ```
 
-Expected: FAIL because UI does not check backend on-chain state.
+Expected: FAIL because UI does not check backend on-chain state or admin wallet equality.
 
-- [ ] **Step 3: Add computed guard**
+- [ ] **Step 7: Add computed guards**
 
 In `ContestDetail.vue`, add:
 
 ```ts
 const solanaReady = computed(() => Boolean(contest.value?.onchainInitializeTxSignature))
+const adminWalletAddress = computed(() => contest.value?.onchainAdminWallet || '')
+const adminWalletBlocked = computed(
+  () => Boolean(activeWallet.value) && activeWallet.value === adminWalletAddress.value,
+)
+const solanaJoinBlockedReason = computed(() => {
+  if (contest.value && !solanaReady.value) return 'Contest is not initialized on Solana yet.'
+  if (adminWalletBlocked.value) return 'The admin wallet that initialized this contest cannot join it.'
+  return ''
+})
 ```
 
-- [ ] **Step 4: Show message and prevent join**
+- [ ] **Step 8: Show admin wallet, message, and prevent join**
 
 In template near wallet card:
 
 ```vue
-<p v-if="contest && !solanaReady" class="text-sm text-amber-600 dark:text-amber-300">
-  Contest is not initialized on Solana yet.
+<p v-if="adminWalletAddress" class="text-xs text-gray-500 dark:text-gray-400" :title="adminWalletAddress">
+  Admin wallet {{ shortAddress(adminWalletAddress) }}
+</p>
+<p v-if="solanaJoinBlockedReason" class="text-sm text-amber-600 dark:text-amber-300">
+  {{ solanaJoinBlockedReason }}
 </p>
 ```
 
 In `joinContest`, change guard:
 
 ```ts
-if (joining.value || joined.value || !contest.value || !solanaReady.value) return
+if (joining.value || joined.value || !contest.value || !solanaReady.value || adminWalletBlocked.value) return
+```
+
+Add helper:
+
+```ts
+function shortAddress(address: string): string {
+  return `${address.slice(0, 4)}...${address.slice(-4)}`
+}
 ```
 
 Pass a new prop to `SolanaWalletConnect` only if needed. If `SolanaWalletConnect` already disables only based on `walletAddress`, leave button active but blocked by `joinContest`; the message is the important UX.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 9: Run tests**
 
 Run:
 
 ```powershell
+.\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_solana_join_service.py -q
 npm.cmd run test:unit -- src/views/__tests__/ContestDetail.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```powershell
-git add src/views/ContestDetail.vue src/views/__tests__/ContestDetail.test.ts
-git commit -m "feat: guard solana join until contest initialized"
+git add backend_v2/src/services/solana_join.py backend_v2/tests/test_solana_join_service.py src/views/ContestDetail.vue src/views/__tests__/ContestDetail.test.ts
+git commit -m "feat: guard solana join by contest admin wallet"
 ```
 
 ### Task 7: Documentation and Verification
@@ -1088,8 +1260,10 @@ In `docs/solana-devnet-deployment.md`, add:
 2. Create a contest with a slug of 32 bytes or less.
 3. Click `Initialize on Solana`.
 4. Confirm the Phantom/Solflare devnet transaction.
-5. Wait for the row to show `On-chain ready`.
-6. Users can now join the contest on Solana.
+5. Wait for the row to show `On-chain ready` and `Admin wallet <short-address>`.
+6. Open the contest detail page and confirm it shows the same admin wallet.
+7. Connect the same admin wallet and confirm the UI shows `The admin wallet that initialized this contest cannot join it`.
+8. Connect a different Solana wallet; that wallet can now join the contest on Solana.
 
 CLI fallback:
 
@@ -1111,6 +1285,7 @@ Run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_admin_contest_onchain.py backend_v2\tests\test_crypto_app_surface.py -q
+.\.venv\Scripts\python.exe -m pytest backend_v2\tests\test_solana_join_service.py -q
 npm.cmd run test:unit -- src/services/__tests__/solanaWallet.test.ts src/services/__tests__/cryptoContestApi.test.ts src/views/Admin/__tests__/TabContests.test.ts src/views/__tests__/ContestDetail.test.ts
 npm.cmd run type-check
 npm.cmd run build-only
@@ -1139,7 +1314,7 @@ This order makes each task independently testable and keeps the highest-risk pie
 
 ## Self-Review
 
-- Spec coverage: plan covers admin wallet signing, backend persistence, UI flow, join guard, env/docs, and CLI fallback.
+- Spec coverage: plan covers admin wallet signing, backend persistence, admin wallet display, same-admin-wallet join rejection in backend and frontend, env/docs, and CLI fallback.
 - Placeholder scan: no `TBD`, `TODO`, `implement later`, or vague edge-case instructions remain.
 - Type consistency: `onchainContestAddress`, `onchainInitializeTxSignature`, `onchainAdminWallet`, and `onchainInitializedAt` are consistently mapped from backend snake_case fields.
 - Scope check: Metaplex NFT minting and Pinata remain out of scope; this plan only solves contest on-chain initialization.
