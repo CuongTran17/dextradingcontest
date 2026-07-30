@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
   fetchAdminContestParticipants,
@@ -113,6 +114,48 @@ describe('cryptoContestApi', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer token-123' },
     })
+  })
+
+  it('confirms contest on-chain initialization with bearer auth', async () => {
+    vi.mocked(backendFetch).mockResolvedValue({
+      id: 'summer-cup',
+      title: 'Summer Cup',
+      status: 'upcoming',
+      raw_status: 'scheduled',
+      mode: 'contest',
+      initial_capital: 10000,
+      quote_asset: 'USDT_TEST',
+      symbols: ['BTCUSDT'],
+      starts_at: null,
+      ends_at: null,
+      participant_count: 0,
+      onchain_contest_address: 'ContestPda1111111111111111111111111111111',
+      onchain_initialize_tx_signature: '5'.repeat(88),
+      onchain_admin_wallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      onchain_initialized_at: '2026-07-30T10:00:00+00:00',
+    })
+
+    const contest = await confirmContestOnchainInitialize({
+      contestId: 'summer-cup',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      initializeTxSignature: '5'.repeat(88),
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    })
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      '/api/admin/crypto/contests/summer-cup/onchain/confirm',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer token-123' },
+        body: JSON.stringify({
+          contest_address: 'ContestPda1111111111111111111111111111111',
+          initialize_tx_signature: '5'.repeat(88),
+          admin_wallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+        }),
+      },
+    )
+    expect(contest.onchainInitializeTxSignature).toBe('5'.repeat(88))
   })
 
   it('loads and moderates admin contest participants', async () => {

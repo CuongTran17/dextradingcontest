@@ -70,6 +70,10 @@ export interface Contest {
   startsAt: string
   endsAt: string
   participantCount: number
+  onchainContestAddress?: string | null
+  onchainInitializeTxSignature?: string | null
+  onchainAdminWallet?: string | null
+  onchainInitializedAt?: string | null
 }
 
 export type LeaderboardSortBy = 'equity' | 'pnl' | 'roi'

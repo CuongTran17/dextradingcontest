@@ -24,6 +24,10 @@ interface BackendContest {
   starts_at: string | null
   ends_at: string | null
   participant_count: number
+  onchain_contest_address?: string | null
+  onchain_initialize_tx_signature?: string | null
+  onchain_admin_wallet?: string | null
+  onchain_initialized_at?: string | null
 }
 
 interface BackendLeaderboardRow {
@@ -199,6 +203,28 @@ export async function setAdminCryptoContestStatus(
   return mapContest(contest)
 }
 
+export async function confirmContestOnchainInitialize(input: {
+  contestId: string
+  contestAddress: string
+  initializeTxSignature: string
+  adminWallet: string
+}): Promise<Contest> {
+  const contest = await backendFetch<BackendContest>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(input.contestId)}/onchain/confirm`,
+    {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        contest_address: input.contestAddress,
+        initialize_tx_signature: input.initializeTxSignature,
+        admin_wallet: input.adminWallet,
+      }),
+    },
+  )
+  return mapContest(contest)
+}
+
 export async function fetchAdminContestParticipants(
   contestId: string,
 ): Promise<AdminContestParticipant[]> {
@@ -253,6 +279,10 @@ function mapContest(contest: BackendContest): Contest {
     startsAt: contest.starts_at ?? '',
     endsAt: contest.ends_at ?? '',
     participantCount: contest.participant_count,
+    onchainContestAddress: contest.onchain_contest_address ?? null,
+    onchainInitializeTxSignature: contest.onchain_initialize_tx_signature ?? null,
+    onchainAdminWallet: contest.onchain_admin_wallet ?? null,
+    onchainInitializedAt: contest.onchain_initialized_at ?? null,
   }
 }
 
