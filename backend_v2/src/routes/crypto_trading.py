@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from src.database.db import get_db
 from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import (
+    CertificateClaimConfirmRequest,
     CertificateClaimStatusResponse,
     ContestWalletResponse,
     MarketOrderCreate,
@@ -201,6 +203,31 @@ def get_my_certificate_claim(
     if claim is None:
         return CertificateClaimStatusResponse(contest_id=contest_id, eligible=False)
 
+    return certificate_claim_response(contest_id, claim)
+
+
+@router.post(
+    "/contests/{contest_id}/certificates/claim/confirm",
+    response_model=CertificateClaimStatusResponse,
+)
+def confirm_my_certificate_claim(
+    contest_id: str,
+    body: CertificateClaimConfirmRequest,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    repo = CryptoTradingRepository(db)
+    claim = repo.get_certificate_claim_for_user(contest_id, current_user.id)
+    if claim is None:
+        raise HTTPException(status_code=404, detail="Certificate claim not found")
+
+    repo.mark_certificate_claimed(
+        claim,
+        body.mint_address,
+        body.mint_tx_signature,
+        datetime.now(timezone.utc),
+    )
+    repo.commit()
     return certificate_claim_response(contest_id, claim)
 
 

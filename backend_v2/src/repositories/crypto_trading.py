@@ -512,6 +512,18 @@ class CryptoTradingRepository:
             .first()
         )
 
+    def mark_certificate_claimed(
+        self,
+        claim: CryptoCertificateClaim,
+        mint_address: str | None,
+        mint_tx_signature: str,
+        claimed_at: datetime,
+    ) -> CryptoCertificateClaim:
+        claim.mint_address = mint_address
+        claim.mint_tx_signature = mint_tx_signature
+        claim.claimed_at = claimed_at
+        return claim
+
     def add_account_event(self, event: CryptoAccountEvent) -> CryptoAccountEvent:
         self.db.add(event)
         return event

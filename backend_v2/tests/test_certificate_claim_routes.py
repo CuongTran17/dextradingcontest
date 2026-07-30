@@ -190,3 +190,40 @@ def test_get_my_certificate_returns_not_eligible_without_claim(
         "mint_tx_signature": None,
         "claimed_at": None,
     }
+
+
+def test_confirm_certificate_claim_stores_signature(
+    client: TestClient,
+    db_session: Session,
+    seeded_contest: Contest,
+    seeded_participant: ContestParticipant,
+):
+    claim = CryptoCertificateClaim(
+        id=302,
+        contest_id=seeded_contest.id,
+        participant_id=seeded_participant.id,
+        wallet_address="So11111111111111111111111111111111111111112",
+        rank=1,
+        recipient_name="Alice",
+        final_equity=Decimal("12850.42"),
+        roi=Decimal("28.5042"),
+        snapshot_hash="aa" * 32,
+        certificate_image_uri="ipfs://QmImage",
+        certificate_metadata_uri="ipfs://QmMetadata",
+        merkle_leaf="bb" * 32,
+        merkle_proof_json=json.dumps([]),
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(claim)
+    db_session.commit()
+
+    response = client.post(
+        "/api/crypto/contests/practice-arena/certificates/claim/confirm",
+        json={"mint_address": None, "mint_tx_signature": "5" * 88},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["eligible"] is True
+    assert body["mint_tx_signature"] == "5" * 88
+    assert body["claimed_at"]

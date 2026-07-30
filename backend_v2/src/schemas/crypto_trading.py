@@ -54,6 +54,11 @@ class CertificateClaimStatusResponse(BaseModel):
     claimed_at: str | None = None
 
 
+class CertificateClaimConfirmRequest(BaseModel):
+    mint_address: str | None = Field(default=None, max_length=64)
+    mint_tx_signature: str = Field(min_length=32, max_length=128)
+
+
 class ContestResponse(BaseModel):
     id: str
     title: str
