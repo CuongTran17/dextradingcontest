@@ -208,10 +208,13 @@ async function saveContest() {
   try {
     const symbols = form.value.symbolsText
       .split(',')
-      .map((item) => item.trim())
+      .map((item) => item.trim().toUpperCase())
       .filter(Boolean) as CryptoSymbol[]
     const startsAt = toIsoDateTime(form.value.startsAt)
     const endsAt = toIsoDateTime(form.value.endsAt)
+    const slug = normalizeSlug(form.value.slug)
+    form.value.slug = slug
+    form.value.symbolsText = symbols.join(',')
 
     if (editingContestId.value) {
       const updated = await updateAdminCryptoContest(editingContestId.value, {
@@ -226,7 +229,7 @@ async function saveContest() {
     }
 
     const created = await createAdminCryptoContest({
-      slug: form.value.slug,
+      slug,
       title: form.value.title,
       mode: form.value.mode,
       status: form.value.status,
@@ -288,6 +291,14 @@ function resetForm() {
     startsAt: '',
     endsAt: '',
   }
+}
+
+function normalizeSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function toIsoDateTime(value: string): string | null {

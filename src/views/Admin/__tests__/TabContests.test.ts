@@ -72,6 +72,30 @@ describe('TabContests', () => {
     )
   })
 
+  it('normalizes contest slug and symbols before creating', async () => {
+    vi.mocked(createAdminCryptoContest).mockResolvedValue({
+      ...contest,
+      id: 'winter-cup',
+      title: 'Winter Cup',
+      symbols: ['BTCUSDT', 'SOLUSDT'],
+    })
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+
+    await wrapper.get('[data-test="contest-slug"]').setValue('Winter Cup')
+    await wrapper.get('[data-test="contest-title"]').setValue('Winter Cup')
+    await wrapper.get('[data-test="contest-symbols"]').setValue('btcusdt, solusdt')
+    await wrapper.get('[data-test="contest-form"]').trigger('submit')
+
+    expect(createAdminCryptoContest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'winter-cup',
+        symbols: ['BTCUSDT', 'SOLUSDT'],
+      }),
+    )
+  })
+
   it('updates editable contest details from the table', async () => {
     vi.mocked(updateAdminCryptoContest).mockResolvedValue({
       ...contest,

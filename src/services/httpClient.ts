@@ -81,6 +81,23 @@ function errorMessageFromBody(status: number, statusText: string, body: unknown)
   if (body && typeof body === 'object') {
     const record = body as Record<string, unknown>
     const detail = record.detail || record.error || record.message
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          if (!item || typeof item !== 'object') return ''
+          const issue = item as Record<string, unknown>
+          const msg = typeof issue.msg === 'string' ? issue.msg : ''
+          const loc = Array.isArray(issue.loc)
+            ? issue.loc.filter((part) => part !== 'body').join('.')
+            : ''
+          if (!msg) return ''
+          return loc ? `${loc}: ${msg}` : msg
+        })
+        .filter(Boolean)
+      if (messages.length > 0) {
+        return messages.join('; ')
+      }
+    }
     if (typeof detail === 'string' && detail.trim()) {
       return detail
     }

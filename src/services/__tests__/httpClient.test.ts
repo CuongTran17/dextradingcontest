@@ -28,4 +28,30 @@ describe('httpClient', () => {
 
     await expectation
   })
+
+  it('surfaces FastAPI validation details in API errors', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              loc: ['body', 'slug'],
+              msg: 'String should match pattern',
+            },
+          ],
+        }),
+        {
+          status: 422,
+          statusText: 'Unprocessable Content',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    )
+
+    await expect(
+      backendFetch('http://localhost:8000', '/api/admin/crypto/contests', {
+        method: 'POST',
+      }),
+    ).rejects.toThrow('slug: String should match pattern')
+  })
 })
