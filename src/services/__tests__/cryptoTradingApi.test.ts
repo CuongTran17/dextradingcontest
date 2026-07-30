@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { backendFetch } from '@/services/httpClient'
 import {
+  confirmCertificateClaim,
+  fetchMyCertificate,
   getCryptoAccount,
   joinCryptoContest,
   placeCryptoMarketOrder,
@@ -99,5 +101,65 @@ describe('cryptoTradingApi', () => {
       'Please sign in to trade',
     )
     expect(backendFetch).not.toHaveBeenCalled()
+  })
+
+  it('fetches my certificate claim status', async () => {
+    localStorage.setItem('crypto_contest_token', 'token-123')
+    vi.mocked(backendFetch).mockResolvedValue({
+      contest_id: 'practice-arena',
+      eligible: true,
+      wallet_address: 'So11111111111111111111111111111111111111112',
+      rank: 1,
+      recipient_name: 'Alice',
+      image_uri: 'ipfs://QmImage',
+      metadata_uri: 'ipfs://QmMetadata',
+      snapshot_hash: 'aa'.repeat(32),
+      proof: [],
+      mint_address: null,
+      mint_tx_signature: null,
+      claimed_at: null,
+    })
+
+    const result = await fetchMyCertificate('practice-arena')
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://backend',
+      '/api/crypto/contests/practice-arena/certificates/me',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token-123' },
+      }),
+    )
+    expect(result.eligible).toBe(true)
+    expect(result.imageUri).toBe('ipfs://QmImage')
+  })
+
+  it('confirms a certificate claim transaction', async () => {
+    localStorage.setItem('crypto_contest_token', 'token-123')
+    vi.mocked(backendFetch).mockResolvedValue({
+      contest_id: 'practice-arena',
+      eligible: true,
+      wallet_address: 'So11111111111111111111111111111111111111112',
+      rank: 1,
+      recipient_name: 'Alice',
+      image_uri: 'ipfs://QmImage',
+      metadata_uri: 'ipfs://QmMetadata',
+      snapshot_hash: 'aa'.repeat(32),
+      proof: [],
+      mint_address: null,
+      mint_tx_signature: '5'.repeat(88),
+      claimed_at: '2026-07-30T10:00:00+00:00',
+    })
+
+    const result = await confirmCertificateClaim({
+      contestId: 'practice-arena',
+      mintTxSignature: '5'.repeat(88),
+    })
+
+    const request = vi.mocked(backendFetch).mock.calls[0][2]
+    expect(JSON.parse(request?.body as string)).toEqual({
+      mint_address: null,
+      mint_tx_signature: '5'.repeat(88),
+    })
+    expect(result.mintTxSignature).toBe('5'.repeat(88))
   })
 })

@@ -54,6 +54,36 @@ interface BackendContestWallet {
   joined_onchain_at: string | null
 }
 
+interface BackendCertificateClaimStatus {
+  contest_id: string
+  eligible: boolean
+  wallet_address: string | null
+  rank: number | null
+  recipient_name: string | null
+  image_uri: string | null
+  metadata_uri: string | null
+  snapshot_hash: string | null
+  proof: string[]
+  mint_address: string | null
+  mint_tx_signature: string | null
+  claimed_at: string | null
+}
+
+export interface CertificateClaimStatus {
+  contestId: string
+  eligible: boolean
+  walletAddress: string | null
+  rank: number | null
+  recipientName: string | null
+  imageUri: string | null
+  metadataUri: string | null
+  snapshotHash: string | null
+  proof: string[]
+  mintAddress: string | null
+  mintTxSignature: string | null
+  claimedAt: string | null
+}
+
 async function cryptoAuthFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken()
   if (!token) {
@@ -98,6 +128,33 @@ export async function fetchContestWallet(contestId: string): Promise<BackendCont
   return cryptoAuthFetch<BackendContestWallet>(
     `/api/crypto/contests/${encodeURIComponent(contestId)}/wallet`,
   )
+}
+
+export async function fetchMyCertificate(
+  contestId: string,
+): Promise<CertificateClaimStatus> {
+  const status = await cryptoAuthFetch<BackendCertificateClaimStatus>(
+    `/api/crypto/contests/${encodeURIComponent(contestId)}/certificates/me`,
+  )
+  return mapCertificateStatus(status)
+}
+
+export async function confirmCertificateClaim(input: {
+  contestId: string
+  mintAddress?: string | null
+  mintTxSignature: string
+}): Promise<CertificateClaimStatus> {
+  const status = await cryptoAuthFetch<BackendCertificateClaimStatus>(
+    `/api/crypto/contests/${encodeURIComponent(input.contestId)}/certificates/claim/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        mint_address: input.mintAddress ?? null,
+        mint_tx_signature: input.mintTxSignature,
+      }),
+    },
+  )
+  return mapCertificateStatus(status)
 }
 
 export async function getCryptoAccount(contestId: string): Promise<TradingAccount> {
@@ -154,6 +211,25 @@ function mapAccount(account: BackendTradingAccount): TradingAccount {
       averageEntry: position.average_entry,
     })),
     orders: account.orders.map((order) => mapOrder(order, account.contest_id)),
+  }
+}
+
+function mapCertificateStatus(
+  status: BackendCertificateClaimStatus,
+): CertificateClaimStatus {
+  return {
+    contestId: status.contest_id,
+    eligible: status.eligible,
+    walletAddress: status.wallet_address,
+    rank: status.rank,
+    recipientName: status.recipient_name,
+    imageUri: status.image_uri,
+    metadataUri: status.metadata_uri,
+    snapshotHash: status.snapshot_hash,
+    proof: status.proof,
+    mintAddress: status.mint_address,
+    mintTxSignature: status.mint_tx_signature,
+    claimedAt: status.claimed_at,
   }
 }
 
