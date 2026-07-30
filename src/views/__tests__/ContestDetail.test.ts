@@ -70,7 +70,10 @@ describe('ContestDetail', () => {
     const wrapper = mount(ContestDetail, {
       global: {
         stubs: {
-          RouterLink: { template: '<a><slot /></a>' },
+          RouterLink: {
+            props: ['to'],
+            template: '<a :href="to"><slot /></a>',
+          },
         },
       },
     })
@@ -80,6 +83,25 @@ describe('ContestDetail', () => {
     expect(fetchContest).toHaveBeenCalledWith('practice-arena')
     expect(fetchContestWallet).toHaveBeenCalledWith('practice-arena')
     expect(wrapper.text()).toContain('Practice Arena From API')
+  })
+
+  it('links to the certificate claim page', async () => {
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: {
+            props: ['to'],
+            template: '<a :href="to"><slot /></a>',
+          },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const certificateLink = wrapper.find('a[href="/contests/practice-arena/certificates"]')
+    expect(certificateLink.exists()).toBe(true)
+    expect(certificateLink.text()).toContain('Certificate')
   })
 
   it('shows a connect wallet action before on-chain join', async () => {

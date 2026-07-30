@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { title: 'Trade Contest' },
     },
     {
+      path: '/contests/:contestId/certificates',
+      name: 'MyCertificates',
+      component: () => import('../views/MyCertificates.vue'),
+      meta: { title: 'My Certificate', requiresAuth: true },
+    },
+    {
       path: '/contests/:contestId',
       name: 'ContestDetail',
       component: () => import('../views/ContestDetail.vue'),
