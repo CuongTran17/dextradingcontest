@@ -39,6 +39,21 @@ class ContestWalletResponse(BaseModel):
     joined_onchain_at: str | None
 
 
+class CertificateClaimStatusResponse(BaseModel):
+    contest_id: str
+    eligible: bool
+    wallet_address: str | None = None
+    rank: int | None = None
+    recipient_name: str | None = None
+    image_uri: str | None = None
+    metadata_uri: str | None = None
+    snapshot_hash: str | None = None
+    proof: list[str] = Field(default_factory=list)
+    mint_address: str | None = None
+    mint_tx_signature: str | None = None
+    claimed_at: str | None = None
+
+
 class ContestResponse(BaseModel):
     id: str
     title: str

@@ -1,11 +1,15 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.api.auth import require_auth
+from src.database.crypto_models import CryptoCertificateClaim
 from src.database.db import get_db
 from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import (
+    CertificateClaimStatusResponse,
     ContestWalletResponse,
     MarketOrderCreate,
     OrderResponse,
@@ -45,6 +49,26 @@ router = APIRouter(prefix="/api/crypto", tags=["crypto-trading"])
 class BinanceRestLiquidityProvider:
     def get_order_book(self, symbol: str, limit: int) -> dict:
         return get_order_book(symbol, limit)
+
+
+def certificate_claim_response(
+    contest_id: str,
+    claim: CryptoCertificateClaim,
+) -> CertificateClaimStatusResponse:
+    return CertificateClaimStatusResponse(
+        contest_id=contest_id,
+        eligible=True,
+        wallet_address=claim.wallet_address,
+        rank=claim.rank,
+        recipient_name=claim.recipient_name,
+        image_uri=claim.certificate_image_uri,
+        metadata_uri=claim.certificate_metadata_uri,
+        snapshot_hash=claim.snapshot_hash,
+        proof=json.loads(claim.merkle_proof_json),
+        mint_address=claim.mint_address,
+        mint_tx_signature=claim.mint_tx_signature,
+        claimed_at=claim.claimed_at.isoformat() if claim.claimed_at else None,
+    )
 
 
 def get_account_service(
@@ -161,6 +185,23 @@ def confirm_solana_join(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SolanaJoinVerificationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(
+    "/contests/{contest_id}/certificates/me",
+    response_model=CertificateClaimStatusResponse,
+)
+def get_my_certificate_claim(
+    contest_id: str,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    repo = CryptoTradingRepository(db)
+    claim = repo.get_certificate_claim_for_user(contest_id, current_user.id)
+    if claim is None:
+        return CertificateClaimStatusResponse(contest_id=contest_id, eligible=False)
+
+    return certificate_claim_response(contest_id, claim)
 
 
 @router.get(

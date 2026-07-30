@@ -493,6 +493,25 @@ class CryptoTradingRepository:
         self.db.add(claim)
         return claim
 
+    def get_certificate_claim_for_user(
+        self,
+        contest_slug: str,
+        user_id: int,
+    ) -> CryptoCertificateClaim | None:
+        return (
+            self.db.query(CryptoCertificateClaim)
+            .join(
+                ContestParticipant,
+                ContestParticipant.id == CryptoCertificateClaim.participant_id,
+            )
+            .join(Contest, Contest.id == CryptoCertificateClaim.contest_id)
+            .filter(
+                Contest.slug == contest_slug,
+                ContestParticipant.user_id == user_id,
+            )
+            .first()
+        )
+
     def add_account_event(self, event: CryptoAccountEvent) -> CryptoAccountEvent:
         self.db.add(event)
         return event
