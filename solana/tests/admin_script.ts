@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { contestPda, hex32, parseAdminArgs } from "../scripts/admin";
+import { contestPda, hex32, parseAdminArgs, runAdminCommand } from "../scripts/admin";
 
 describe("admin script helpers", () => {
   const programId = new PublicKey("9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx");
@@ -35,5 +35,63 @@ describe("admin script helpers", () => {
       programId,
     )[0];
     assert.equal(pda.toBase58(), expected.toBase58());
+  });
+});
+
+function fakeProgram() {
+  const calls: string[] = [];
+  const rpc = async (label: string) => {
+    calls.push(label);
+    return `${label}-signature`;
+  };
+  return {
+    calls,
+    programId: new PublicKey("9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx"),
+    provider: {
+      publicKey: new PublicKey("ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB"),
+    },
+    methods: {
+      initializeContest: (contestId: string) => ({
+        accounts: () => ({
+          rpc: () => rpc(`initialize:${contestId}`),
+        }),
+      }),
+      setJoinEnabled: (enabled: boolean) => ({
+        accounts: () => ({
+          rpc: () => rpc(`join:${enabled}`),
+        }),
+      }),
+      publishCertificateRoot: (root: number[], snapshotHash: number[]) => ({
+        accounts: () => ({
+          rpc: () => rpc(`root:${root.length}:${snapshotHash.length}`),
+        }),
+      }),
+    },
+  };
+}
+
+describe("admin script dispatch", () => {
+  it("dispatches initialize-contest to Anchor", async () => {
+    const program = fakeProgram();
+    const signature = await runAdminCommand(
+      { kind: "initialize-contest", contestId: "practice-arena" },
+      { program: program as any },
+    );
+    assert.equal(signature, "initialize:practice-arena-signature");
+    assert.deepEqual(program.calls, ["initialize:practice-arena"]);
+  });
+
+  it("dispatches publish-certificate-root with 32-byte arrays", async () => {
+    const program = fakeProgram();
+    const signature = await runAdminCommand(
+      {
+        kind: "publish-certificate-root",
+        contestId: "practice-arena",
+        root: Array.from(Buffer.alloc(32, 1)),
+        snapshotHash: Array.from(Buffer.alloc(32, 2)),
+      },
+      { program: program as any },
+    );
+    assert.equal(signature, "root:32:32-signature");
   });
 });
