@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   claimCertificateOnchain,
   connectSolanaWallet,
+  initializeContestOnchain,
   joinContestOnchain,
 } from '@/services/solanaWallet'
 
@@ -53,6 +54,74 @@ describe('solanaWallet', () => {
         walletPublicKey: wallet.toBase58(),
       }),
     ).rejects.toThrow('Contest summer-cup is not initialized on Solana devnet')
+    expect(signAndSendTransaction).not.toHaveBeenCalled()
+  })
+
+  it('builds and sends the initialize contest instruction', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue(null)
+    vi.spyOn(Connection.prototype, 'getBalance').mockResolvedValue(1_000_000_000)
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'confirmTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null },
+    })
+    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
+      new PublicKey('11111111111111111111111111111111'),
+      255,
+    ])
+
+    const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    const sentTransactions: unknown[] = []
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: admin }),
+      signAndSendTransaction: async (transaction) => {
+        sentTransactions.push(transaction)
+        return { signature: '5'.repeat(88) }
+      },
+    }
+
+    await expect(initializeContestOnchain({ contestId: 'summer-cup' })).resolves.toEqual({
+      adminWallet: admin.toBase58(),
+      contestAddress: '11111111111111111111111111111111',
+      signature: '5'.repeat(88),
+    })
+
+    const transaction = sentTransactions[0] as {
+      instructions: Array<{ data: Buffer; programId: PublicKey }>
+    }
+    const instruction = transaction.instructions[0]
+    const instructionData = Buffer.from(instruction.data)
+    expect(instruction.programId.toBase58()).toBe('9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    expect([...instructionData.subarray(0, 8)]).toEqual([8, 124, 233, 229, 42, 156, 92, 3])
+    expect(instructionData.includes(Buffer.from('summer-cup'))).toBe(true)
+  })
+
+  it('does not initialize a contest that already has an on-chain account', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue({
+      data: Buffer.alloc(0),
+    } as never)
+    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
+      new PublicKey('11111111111111111111111111111111'),
+      255,
+    ])
+    const signAndSendTransaction = vi.fn()
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({
+        publicKey: new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB'),
+      }),
+      signAndSendTransaction,
+    }
+
+    await expect(initializeContestOnchain({ contestId: 'summer-cup' })).rejects.toThrow(
+      'Contest summer-cup is already initialized on Solana devnet',
+    )
     expect(signAndSendTransaction).not.toHaveBeenCalled()
   })
 

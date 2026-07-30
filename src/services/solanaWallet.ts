@@ -9,6 +9,7 @@ import { Buffer } from 'buffer'
 
 const DEFAULT_SOLANA_RPC_URL = 'https://api.devnet.solana.com'
 const MIN_JOIN_BALANCE_LAMPORTS = 5_000_000
+const INITIALIZE_CONTEST_DISCRIMINATOR = Uint8Array.from([8, 124, 233, 229, 42, 156, 92, 3])
 const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254, 100, 133])
 const CLAIM_CERTIFICATE_DISCRIMINATOR = Uint8Array.from([45, 124, 106, 139, 156, 89, 153, 233])
 const textEncoder = new TextEncoder()
@@ -56,6 +57,16 @@ export interface ConnectSolanaWalletResult {
   walletName: string
 }
 
+export interface InitializeContestOnchainInput {
+  contestId: string
+}
+
+export interface InitializeContestOnchainResult {
+  adminWallet: string
+  contestAddress: string
+  signature: string
+}
+
 function solanaRpcUrl(): string {
   return import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL
 }
@@ -81,6 +92,57 @@ export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> 
   return {
     walletAddress: connected.publicKey.toBase58(),
     walletName: walletProviderName(provider),
+  }
+}
+
+export async function initializeContestOnchain(
+  input: InitializeContestOnchainInput,
+): Promise<InitializeContestOnchainResult> {
+  if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
+    throw new Error('Contest id must be 32 bytes or shorter for Solana')
+  }
+
+  const provider = solanaProvider()
+  const connected = await provider.connect()
+  const admin = connected.publicKey
+  const programId = contestProgramId()
+  const contest = PublicKey.findProgramAddressSync(
+    [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
+    programId,
+  )[0]
+  const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const existingContest = await connection.getAccountInfo(contest, 'confirmed')
+  if (existingContest) {
+    throw new Error(`Contest ${input.contestId} is already initialized on Solana devnet`)
+  }
+
+  const balance = await connection.getBalance(admin, 'confirmed')
+  if (balance < MIN_JOIN_BALANCE_LAMPORTS) {
+    throw new Error('Admin Solana devnet wallet needs SOL before initializing this contest')
+  }
+
+  const transaction = new Transaction().add(
+    new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: contest, isSigner: false, isWritable: true },
+        { pubkey: admin, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: Buffer.concat([
+        Buffer.from(INITIALIZE_CONTEST_DISCRIMINATOR),
+        encodeAnchorString(input.contestId),
+      ]),
+    }),
+  )
+  transaction.feePayer = admin
+  transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
+
+  const { signature } = await signAndConfirm(provider, connection, transaction)
+  return {
+    adminWallet: admin.toBase58(),
+    contestAddress: contest.toBase58(),
+    signature,
   }
 }
 
