@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 
 _LEADERBOARD_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _LEADERBOARD_CACHE_TTL = 15.0
@@ -241,6 +242,10 @@ class CryptoContestService:
             "starts_at": _iso(contest.starts_at),
             "ends_at": _iso(contest.ends_at),
             "participant_count": len(contest.participants),
+            "onchain_contest_address": contest.onchain_contest_address,
+            "onchain_initialize_tx_signature": contest.onchain_initialize_tx_signature,
+            "onchain_admin_wallet": contest.onchain_admin_wallet,
+            "onchain_initialized_at": _iso(contest.onchain_initialized_at),
         }
 
     def _participant_rows(self, contest: Contest, participants: list) -> list[dict]:

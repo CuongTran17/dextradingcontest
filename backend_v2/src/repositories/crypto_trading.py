@@ -247,6 +247,20 @@ class CryptoTradingRepository:
         participant.joined_onchain_at = joined_onchain_at
         return participant
 
+    def mark_contest_onchain_initialized(
+        self,
+        contest: Contest,
+        contest_address: str,
+        initialize_tx_signature: str,
+        admin_wallet: str,
+        initialized_at: datetime,
+    ) -> Contest:
+        contest.onchain_contest_address = contest_address
+        contest.onchain_initialize_tx_signature = initialize_tx_signature
+        contest.onchain_admin_wallet = admin_wallet
+        contest.onchain_initialized_at = initialized_at
+        return contest
+
     def create_participant(
         self,
         contest_id: int,

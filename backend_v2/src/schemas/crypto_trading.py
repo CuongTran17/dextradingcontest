@@ -82,6 +82,10 @@ class ContestResponse(BaseModel):
     starts_at: str | None
     ends_at: str | None
     participant_count: int
+    onchain_contest_address: str | None = None
+    onchain_initialize_tx_signature: str | None = None
+    onchain_admin_wallet: str | None = None
+    onchain_initialized_at: str | None = None
 
 
 class ContestCreate(BaseModel):

@@ -76,6 +76,10 @@ class Contest(Base):
     ends_at = Column(DateTime, nullable=True)
     fee_rate = Column(Numeric(12, 10), nullable=False, default=0.001)
     rules_json = Column(Text, nullable=False, default="{}")
+    onchain_contest_address = Column(String(64), nullable=True)
+    onchain_initialize_tx_signature = Column(String(128), nullable=True)
+    onchain_admin_wallet = Column(String(64), nullable=True)
+    onchain_initialized_at = Column(DateTime, nullable=True)
     created_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
