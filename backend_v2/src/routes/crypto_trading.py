@@ -40,6 +40,7 @@ from src.services.crypto_execution import (
     InsufficientPositionError,
 )
 from src.services.solana_join import (
+    AdminWalletCannotJoinContestError,
     ContestUnavailableForSolanaJoinError,
     SolanaRpcTransactionVerifier,
     SolanaJoinService,
@@ -203,6 +204,8 @@ def confirm_solana_join(
     except ContestUnavailableForSolanaJoinError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WalletAlreadyBoundError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AdminWalletCannotJoinContestError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SolanaJoinVerificationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

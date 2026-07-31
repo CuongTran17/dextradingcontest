@@ -25,6 +25,13 @@ vi.mock('@/services/authApi', () => ({
   logout: vi.fn(),
 }))
 
+vi.mock('../SidebarSolanaWallet.vue', () => ({
+  default: {
+    props: ['expanded'],
+    template: '<div data-test="sidebar-wallet">Wallet widget {{ expanded }}</div>',
+  },
+}))
+
 describe('AppSidebar', () => {
   beforeEach(() => {
     vi.mocked(isLoggedIn).mockReturnValue(false)
@@ -55,5 +62,27 @@ describe('AppSidebar', () => {
     expect(wrapper.text()).not.toContain('Premium')
     expect(wrapper.text()).not.toContain('Stocks')
     expect(wrapper.text()).not.toContain('DNSE')
+  })
+
+  it('shows the sidebar wallet widget only after account sign in', () => {
+    vi.mocked(isLoggedIn).mockReturnValue(false)
+    const loggedOut = mount(AppSidebar, {
+      global: {
+        stubs: {
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+    expect(loggedOut.find('[data-test="sidebar-wallet"]').exists()).toBe(false)
+
+    vi.mocked(isLoggedIn).mockReturnValue(true)
+    const loggedIn = mount(AppSidebar, {
+      global: {
+        stubs: {
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+    expect(loggedIn.find('[data-test="sidebar-wallet"]').exists()).toBe(true)
   })
 })

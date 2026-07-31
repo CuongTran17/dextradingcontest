@@ -24,6 +24,7 @@
             :joining="joining"
             :error="joinError"
             @connect="connectWallet"
+            @disconnect="disconnectWallet"
             @join="joinContest"
           />
           <router-link
@@ -90,7 +91,7 @@ import SolanaWalletConnect from '@/components/crypto/SolanaWalletConnect.vue'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { fetchContest } from '@/services/cryptoContestApi'
 import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
-import { connectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
+import { connectSolanaWallet, disconnectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 const route = useRoute()
@@ -158,6 +159,20 @@ async function connectWallet() {
   }
 }
 
+async function disconnectWallet() {
+  if (joined.value) return
+
+  joinError.value = ''
+  try {
+    await disconnectSolanaWallet()
+  } catch (error) {
+    joinError.value = error instanceof Error ? error.message : 'Unable to disconnect Solana wallet'
+  } finally {
+    connectedWallet.value = ''
+    walletName.value = 'Solana wallet'
+  }
+}
+
 async function joinContest() {
   if (
     joining.value ||
@@ -172,10 +187,12 @@ async function joinContest() {
   joining.value = true
   joinError.value = ''
   try {
-    const onchainJoin = await joinContestOnchain({
+    const pendingJoin = readPendingSolanaJoin(contest.value.id, activeWallet.value)
+    const onchainJoin = pendingJoin ?? await joinContestOnchain({
       contestId: contest.value.id,
       walletPublicKey: connectedWallet.value || undefined,
     })
+    storePendingSolanaJoin(contest.value.id, onchainJoin)
     await confirmSolanaJoin({
       contestId: contest.value.id,
       walletAddress: onchainJoin.walletAddress,
@@ -183,8 +200,9 @@ async function joinContest() {
     })
     joined.value = true
     joinedWallet.value = onchainJoin.walletAddress
+    clearPendingSolanaJoin(contest.value.id, onchainJoin.walletAddress)
   } catch (error) {
-    joinError.value = error instanceof Error ? error.message : 'Unable to join contest'
+    joinError.value = joinErrorMessage(error)
   } finally {
     joining.value = false
   }
@@ -200,6 +218,49 @@ function formatCurrency(value: number): string {
 
 function shortAddress(address: string): string {
   return `${address.slice(0, 4)}...${address.slice(-4)}`
+}
+
+function pendingSolanaJoinKey(contestSlug: string, walletAddress: string): string {
+  return `crypto_contest_pending_solana_join:${contestSlug}:${walletAddress}`
+}
+
+function readPendingSolanaJoin(
+  contestSlug: string,
+  walletAddress: string,
+): { walletAddress: string; signature: string } | null {
+  if (!walletAddress) return null
+  const raw = localStorage.getItem(pendingSolanaJoinKey(contestSlug, walletAddress))
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { walletAddress?: string; signature?: string }
+    if (parsed.walletAddress === walletAddress && parsed.signature) {
+      return { walletAddress, signature: parsed.signature }
+    }
+  } catch {
+    localStorage.removeItem(pendingSolanaJoinKey(contestSlug, walletAddress))
+  }
+  return null
+}
+
+function storePendingSolanaJoin(
+  contestSlug: string,
+  join: { walletAddress: string; signature: string },
+): void {
+  localStorage.setItem(
+    pendingSolanaJoinKey(contestSlug, join.walletAddress),
+    JSON.stringify(join),
+  )
+}
+
+function clearPendingSolanaJoin(contestSlug: string, walletAddress: string): void {
+  localStorage.removeItem(pendingSolanaJoinKey(contestSlug, walletAddress))
+}
+
+function joinErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message && error.message !== 'Unexpected error') {
+    return error.message
+  }
+  return 'Unable to join on Solana. If you already approved a join transaction, click Join on Solana again to sync it with the backend.'
 }
 
 </script>

@@ -8,9 +8,10 @@ import {
   exportContestCertificates,
   fetchAdminCryptoContests,
   setAdminCryptoContestStatus,
+  settleAdminCryptoContest,
   updateAdminCryptoContest,
 } from '@/services/cryptoContestApi'
-import { initializeContestOnchain } from '@/services/solanaWallet'
+import { initializeContestOnchain, setContestJoinEnabledOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 vi.mock('@/services/cryptoContestApi', () => ({
@@ -19,11 +20,13 @@ vi.mock('@/services/cryptoContestApi', () => ({
   exportContestCertificates: vi.fn(),
   fetchAdminCryptoContests: vi.fn(),
   setAdminCryptoContestStatus: vi.fn(),
+  settleAdminCryptoContest: vi.fn(),
   updateAdminCryptoContest: vi.fn(),
 }))
 
 vi.mock('@/services/solanaWallet', () => ({
   initializeContestOnchain: vi.fn(),
+  setContestJoinEnabledOnchain: vi.fn(),
 }))
 
 const contest: Contest = {
@@ -46,6 +49,8 @@ describe('TabContests', () => {
     vi.mocked(confirmContestOnchainInitialize).mockReset()
     vi.mocked(exportContestCertificates).mockReset()
     vi.mocked(initializeContestOnchain).mockReset()
+    vi.mocked(setContestJoinEnabledOnchain).mockReset()
+    vi.mocked(settleAdminCryptoContest).mockReset()
     vi.mocked(updateAdminCryptoContest).mockReset()
     vi.mocked(setAdminCryptoContestStatus).mockReset()
     vi.mocked(fetchAdminCryptoContests).mockResolvedValue([contest])
@@ -188,5 +193,82 @@ describe('TabContests', () => {
     })
     expect(wrapper.text()).toContain('On-chain ready')
     expect(wrapper.text()).toContain('ExUB...J2NB')
+  })
+
+  it('locks joins on-chain, ends early, settles, and exports certificates', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        rawStatus: 'active',
+        onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+        onchainInitializeTxSignature: '5'.repeat(88),
+      },
+    ])
+    vi.mocked(setContestJoinEnabledOnchain).mockResolvedValue({
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      signature: '4'.repeat(88),
+    })
+    vi.mocked(updateAdminCryptoContest).mockResolvedValue({
+      ...contest,
+      rawStatus: 'active',
+      endsAt: '2026-07-30T10:00:00.000Z',
+    })
+    vi.mocked(settleAdminCryptoContest).mockResolvedValue({
+      status: 'completed',
+      contest_id: 'summer-cup',
+      version: 1,
+      snapshot_hash: 'aa'.repeat(32),
+      settlement_prices: {},
+      rows: [],
+      cancelled_orders: [],
+      settled_at: '2026-07-30T10:00:00+00:00',
+    })
+    vi.mocked(exportContestCertificates).mockResolvedValue({
+      contest_id: 'summer-cup',
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      claims: [],
+    })
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="end-export-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(setContestJoinEnabledOnchain).toHaveBeenCalledWith({
+      contestId: 'summer-cup',
+      enabled: false,
+      expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    })
+    expect(updateAdminCryptoContest).toHaveBeenCalledWith('summer-cup', {
+      endsAt: expect.any(String),
+    })
+    expect(settleAdminCryptoContest).toHaveBeenCalledWith('summer-cup')
+    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup')
+    expect(wrapper.text()).toContain('Certificates exported for summer-cup')
+    expect(wrapper.text()).toContain('Claims exported: 0')
+  })
+
+  it('does not end and export when contest is not initialized on-chain', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        rawStatus: 'active',
+        onchainAdminWallet: null,
+        onchainInitializeTxSignature: null,
+      },
+    ])
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="end-export-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(setContestJoinEnabledOnchain).not.toHaveBeenCalled()
+    expect(updateAdminCryptoContest).not.toHaveBeenCalled()
+    expect(settleAdminCryptoContest).not.toHaveBeenCalled()
+    expect(exportContestCertificates).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Initialize this contest on Solana before ending it')
   })
 })

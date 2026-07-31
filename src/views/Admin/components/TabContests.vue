@@ -90,6 +90,15 @@
                 >
                   {{ exportingContestId === contest.id ? 'Exporting...' : 'Export Certificates' }}
                 </button>
+                <button
+                  class="rounded border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950"
+                  type="button"
+                  :data-test="`end-export-${contest.id}`"
+                  :disabled="endingContestId === contest.id || contest.rawStatus === 'completed'"
+                  @click="endAndExportContest(contest)"
+                >
+                  {{ endingContestId === contest.id ? 'Ending...' : 'End & Export Certificates' }}
+                </button>
               </div>
             </td>
           </tr>
@@ -193,10 +202,11 @@ import {
   exportContestCertificates,
   fetchAdminCryptoContests,
   setAdminCryptoContestStatus,
+  settleAdminCryptoContest,
   updateAdminCryptoContest,
   type CertificateExportResult,
 } from '@/services/cryptoContestApi'
-import { initializeContestOnchain } from '@/services/solanaWallet'
+import { initializeContestOnchain, setContestJoinEnabledOnchain } from '@/services/solanaWallet'
 import type { Contest, CryptoSymbol, RawContestStatus } from '@/types/crypto'
 
 const contests = ref<Contest[]>([])
@@ -205,6 +215,7 @@ const error = ref('')
 const editingContestId = ref('')
 const exportingContestId = ref('')
 const initializingContestId = ref('')
+const endingContestId = ref('')
 const certificateExport = ref<CertificateExportResult | null>(null)
 const form = ref({
   slug: '',
@@ -309,6 +320,41 @@ async function initializeOnchain(contestId: string) {
     error.value = err instanceof Error ? err.message : 'Unable to initialize contest on Solana'
   } finally {
     initializingContestId.value = ''
+  }
+}
+
+async function endAndExportContest(contest: Contest) {
+  if (!contest.onchainAdminWallet || !contest.onchainInitializeTxSignature) {
+    error.value = 'Initialize this contest on Solana before ending it'
+    return
+  }
+
+  endingContestId.value = contest.id
+  error.value = ''
+  try {
+    await setContestJoinEnabledOnchain({
+      contestId: contest.id,
+      enabled: false,
+      expectedAdminWallet: contest.onchainAdminWallet,
+    })
+    const endedAt = new Date().toISOString()
+    await updateAdminCryptoContest(contest.id, { endsAt: endedAt })
+    await settleAdminCryptoContest(contest.id)
+    certificateExport.value = await exportContestCertificates(contest.id)
+    contests.value = contests.value.map((item) =>
+      item.id === contest.id
+        ? {
+            ...item,
+            status: 'ended',
+            rawStatus: 'completed',
+            endsAt: endedAt,
+          }
+        : item,
+    )
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unable to end and export contest'
+  } finally {
+    endingContestId.value = ''
   }
 }
 

@@ -9,6 +9,7 @@ import {
   fetchContestLeaderboard,
   fetchContests,
   setAdminContestParticipantStatus,
+  settleAdminCryptoContest,
 } from '@/services/cryptoContestApi'
 import { backendFetch } from '@/services/httpClient'
 
@@ -222,5 +223,30 @@ describe('cryptoContestApi', () => {
     )
     expect(result.merkle_root).toBe('bb'.repeat(32))
     expect(result.claims).toHaveLength(1)
+  })
+
+  it('settles an admin contest with bearer auth', async () => {
+    vi.mocked(backendFetch).mockResolvedValue({
+      status: 'completed',
+      contest_id: 'summer-cup',
+      version: 1,
+      snapshot_hash: 'aa'.repeat(32),
+      settlement_prices: {},
+      rows: [],
+      cancelled_orders: [],
+      settled_at: '2026-07-30T10:00:00+00:00',
+    })
+
+    const result = await settleAdminCryptoContest('summer-cup')
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      '/api/admin/crypto/contests/summer-cup/settle',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer token-123' },
+      },
+    )
+    expect(result.snapshot_hash).toBe('aa'.repeat(32))
   })
 })

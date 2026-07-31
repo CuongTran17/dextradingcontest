@@ -11,6 +11,7 @@ const DEFAULT_SOLANA_RPC_URL = 'https://api.devnet.solana.com'
 const MIN_JOIN_BALANCE_LAMPORTS = 5_000_000
 const INITIALIZE_CONTEST_DISCRIMINATOR = Uint8Array.from([8, 124, 233, 229, 42, 156, 92, 3])
 const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254, 100, 133])
+const SET_JOIN_ENABLED_DISCRIMINATOR = Uint8Array.from([130, 14, 52, 92, 87, 2, 180, 137])
 const CLAIM_CERTIFICATE_DISCRIMINATOR = Uint8Array.from([45, 124, 106, 139, 156, 89, 153, 233])
 const textEncoder = new TextEncoder()
 
@@ -19,6 +20,7 @@ interface SolanaWalletProvider {
   isSolflare?: boolean
   publicKey?: PublicKey
   connect: () => Promise<{ publicKey: PublicKey }>
+  disconnect?: () => Promise<void>
   signAndSendTransaction?: (transaction: Transaction) => Promise<{ signature: string }>
   signTransaction?: (transaction: Transaction) => Promise<Transaction>
 }
@@ -67,6 +69,18 @@ export interface InitializeContestOnchainResult {
   signature: string
 }
 
+export interface SetContestJoinEnabledOnchainInput {
+  contestId: string
+  enabled: boolean
+  expectedAdminWallet?: string
+}
+
+export interface SetContestJoinEnabledOnchainResult {
+  adminWallet: string
+  contestAddress: string
+  signature: string
+}
+
 function solanaRpcUrl(): string {
   return import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL
 }
@@ -92,6 +106,13 @@ export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> 
   return {
     walletAddress: connected.publicKey.toBase58(),
     walletName: walletProviderName(provider),
+  }
+}
+
+export async function disconnectSolanaWallet(): Promise<void> {
+  const provider = window.solana
+  if (provider?.disconnect) {
+    await provider.disconnect()
   }
 }
 
@@ -146,6 +167,55 @@ export async function initializeContestOnchain(
   }
 }
 
+export async function setContestJoinEnabledOnchain(
+  input: SetContestJoinEnabledOnchainInput,
+): Promise<SetContestJoinEnabledOnchainResult> {
+  if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
+    throw new Error('Contest id must be 32 bytes or shorter for Solana')
+  }
+
+  const provider = solanaProvider()
+  const connected = await provider.connect()
+  const admin = connected.publicKey
+  if (input.expectedAdminWallet && admin.toBase58() !== input.expectedAdminWallet) {
+    throw new Error('Connected wallet is not the admin wallet that initialized this contest')
+  }
+
+  const programId = contestProgramId()
+  const contest = PublicKey.findProgramAddressSync(
+    [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
+    programId,
+  )[0]
+  const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
+  if (!contestAccount) {
+    throw new Error(`Contest ${input.contestId} is not initialized on Solana devnet`)
+  }
+
+  const transaction = new Transaction().add(
+    new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: contest, isSigner: false, isWritable: true },
+        { pubkey: admin, isSigner: true, isWritable: false },
+      ],
+      data: Buffer.concat([
+        Buffer.from(SET_JOIN_ENABLED_DISCRIMINATOR),
+        Buffer.from([input.enabled ? 1 : 0]),
+      ]),
+    }),
+  )
+  transaction.feePayer = admin
+  transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
+
+  const { signature } = await signAndConfirm(provider, connection, transaction)
+  return {
+    adminWallet: admin.toBase58(),
+    contestAddress: contest.toBase58(),
+    signature,
+  }
+}
+
 export async function joinContestOnchain(
   input: JoinContestOnchainInput,
 ): Promise<JoinContestOnchainResult> {
@@ -166,6 +236,17 @@ export async function joinContestOnchain(
     programId,
   )[0]
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const existingParticipant = await connection.getAccountInfo(participant, 'confirmed')
+  if (existingParticipant) {
+    const signature = await latestSignatureForAddress(connection, participant)
+    if (!signature) {
+      throw new Error(
+        'This wallet already joined on Solana, but no transaction signature was found to sync with the backend',
+      )
+    }
+    return { walletAddress: wallet.toBase58(), signature }
+  }
+
   await assertJoinPrerequisites(connection, input.contestId, contest, wallet)
   const transaction = new Transaction().add(
     new TransactionInstruction({
@@ -184,6 +265,14 @@ export async function joinContestOnchain(
 
   const { signature } = await signAndConfirm(provider, connection, transaction)
   return { walletAddress: wallet.toBase58(), signature }
+}
+
+async function latestSignatureForAddress(
+  connection: Connection,
+  address: PublicKey,
+): Promise<string | null> {
+  const signatures = await connection.getSignaturesForAddress(address, { limit: 1 })
+  return signatures[0]?.signature ?? null
 }
 
 async function assertJoinPrerequisites(
@@ -263,7 +352,7 @@ async function signAndConfirm(
 ): Promise<{ signature: string }> {
   if (provider.signAndSendTransaction) {
     const { signature } = await provider.signAndSendTransaction(transaction)
-    await connection.confirmTransaction(signature, 'confirmed')
+    await connection.confirmTransaction(signature, 'confirmed').catch(() => undefined)
     return { signature }
   }
 
@@ -272,7 +361,7 @@ async function signAndConfirm(
   }
   const signed = await provider.signTransaction(transaction)
   const signature = await connection.sendRawTransaction(signed.serialize())
-  await connection.confirmTransaction(signature, 'confirmed')
+  await connection.confirmTransaction(signature, 'confirmed').catch(() => undefined)
   return { signature }
 }
 

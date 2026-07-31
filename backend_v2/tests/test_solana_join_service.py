@@ -267,3 +267,23 @@ def test_rpc_transaction_verifier_rejects_transaction_without_contest_log():
         )
         is False
     )
+
+
+def test_rpc_transaction_verifier_rejects_when_rpc_request_times_out():
+    def timeout_rpc(_payload):
+        raise TimeoutError("timed out")
+
+    verifier = SolanaRpcTransactionVerifier(
+        rpc_url="https://api.devnet.solana.com",
+        program_id="Contest111111111111111111111111111111111111",
+        rpc_post=timeout_rpc,
+    )
+
+    assert (
+        verifier(
+            "5" * 88,
+            "So11111111111111111111111111111111111111112",
+            "summer-cup",
+        )
+        is False
+    )

@@ -11,6 +11,7 @@ from src.routes.crypto_trading import (
     get_solana_join_service,
     router,
 )
+from src.services.solana_join import AdminWalletCannotJoinContestError
 
 
 ACCOUNT = {
@@ -138,6 +139,22 @@ class FakeSolanaJoinService:
         }
 
 
+class FakeAdminWalletBlockedSolanaJoinService:
+    def get_wallet(self, user_id, contest_slug):
+        return {
+            "contest_id": contest_slug,
+            "wallet_address": None,
+            "wallet_type": None,
+            "join_tx_signature": None,
+            "joined_onchain_at": None,
+        }
+
+    def confirm_join(self, user_id, contest_slug, wallet_address, join_tx_signature):
+        raise AdminWalletCannotJoinContestError(
+            "The admin wallet that initialized this contest cannot join it"
+        )
+
+
 def _make_app(authenticated=False):
     app = FastAPI()
     app.include_router(router)
@@ -262,3 +279,24 @@ def test_solana_wallet_routes_return_bound_wallet_and_confirm_join():
         "wallet_address": "So11111111111111111111111111111111111111112",
         "join_tx_signature": "5" * 88,
     }
+
+
+def test_solana_join_confirm_returns_conflict_for_contest_admin_wallet():
+    app, _order_service = _make_app(authenticated=True)
+    app.dependency_overrides[get_solana_join_service] = (
+        lambda: FakeAdminWalletBlockedSolanaJoinService()
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/crypto/contests/summer-cup/join/confirm",
+        json={
+            "wallet_address": "ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB",
+            "join_tx_signature": "5" * 88,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "The admin wallet that initialized this contest cannot join it"
+    )

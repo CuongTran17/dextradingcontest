@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchContest } from '@/services/cryptoContestApi'
 import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
-import { connectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
+import { connectSolanaWallet, disconnectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
 import ContestDetail from '@/views/ContestDetail.vue'
 
 vi.mock('vue-router', () => ({
@@ -17,6 +17,7 @@ vi.mock('@/services/cryptoTradingApi', () => ({
 
 vi.mock('@/services/solanaWallet', () => ({
   connectSolanaWallet: vi.fn(),
+  disconnectSolanaWallet: vi.fn(),
   joinContestOnchain: vi.fn(),
 }))
 
@@ -26,6 +27,7 @@ vi.mock('@/services/cryptoContestApi', () => ({
 
 describe('ContestDetail', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.mocked(fetchContest).mockReset()
     vi.mocked(fetchContest).mockResolvedValue({
       id: 'practice-arena',
@@ -44,6 +46,8 @@ describe('ContestDetail', () => {
       walletAddress: 'So11111111111111111111111111111111111111112',
       walletName: 'Phantom',
     })
+    vi.mocked(disconnectSolanaWallet).mockReset()
+    vi.mocked(disconnectSolanaWallet).mockResolvedValue(undefined)
     vi.mocked(joinContestOnchain).mockReset()
     vi.mocked(joinContestOnchain).mockResolvedValue({
       walletAddress: 'So11111111111111111111111111111111111111112',
@@ -137,6 +141,27 @@ describe('ContestDetail', () => {
     expect(wrapper.text()).toContain('Phantom')
     expect(wrapper.text()).toContain('So11...1112')
     expect(wrapper.text()).toContain('Join on Solana')
+  })
+
+  it('disconnects a connected Solana wallet before joining', async () => {
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="disconnect-solana-wallet"]').trigger('click')
+    await flushPromises()
+
+    expect(disconnectSolanaWallet).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Wallet not connected')
+    expect(wrapper.text()).toContain('Connect Solana wallet')
+    expect(wrapper.find('[data-testid="disconnect-solana-wallet"]').exists()).toBe(false)
   })
 
   it('shows joined state from an existing backend wallet binding', async () => {
@@ -253,5 +278,37 @@ describe('ContestDetail', () => {
       joinTxSignature: '5'.repeat(88),
     })
     expect(wrapper.get('button').text()).toContain('Joined')
+  })
+
+  it('retries backend confirmation with a pending Solana join signature', async () => {
+    vi.mocked(confirmSolanaJoin)
+      .mockRejectedValueOnce(new Error('Request timed out after 30000ms'))
+      .mockResolvedValueOnce({
+        contest_id: 'practice-arena',
+        wallet_address: 'So11111111111111111111111111111111111111112',
+        wallet_type: 'solana',
+        join_tx_signature: '5'.repeat(88),
+        joined_onchain_at: '2026-07-28T12:00:00+00:00',
+      })
+
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="connect-solana-wallet"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+    await flushPromises()
+
+    expect(joinContestOnchain).toHaveBeenCalledOnce()
+    expect(confirmSolanaJoin).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Joined')
   })
 })

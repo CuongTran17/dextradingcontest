@@ -222,6 +222,12 @@ Sau khi deploy, moi contest can duoc initialize on-chain truoc khi user join.
 7. Connect the same admin wallet and confirm the UI shows `The admin wallet that initialized this contest cannot join it`.
 8. Connect a different Solana wallet; that wallet can now join the contest on Solana.
 
+## Admin End & Export From UI
+
+The admin UI uses the existing `set_join_enabled(false)` instruction as the on-chain authorization step for ending a contest. The wallet connected in Phantom/Solflare must match the contest `onchain_admin_wallet`; otherwise the frontend rejects the action and the smart contract would reject the transaction through `has_one = admin`.
+
+After the on-chain join lock succeeds, the UI updates the contest `endsAt` timestamp to the current time, then the backend settles the simulated contest and exports certificate claims. Publishing the Merkle root remains a separate admin action using `publish_certificate_root`.
+
 ### CLI fallback
 
 Use the CLI when the admin browser wallet flow is unavailable or for smoke tests:

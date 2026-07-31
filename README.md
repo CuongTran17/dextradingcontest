@@ -194,6 +194,16 @@ contest_nft: 9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx
 
 Preferred flow: sign in as an admin, open `/admin?tab=contests`, create a contest whose slug is 32 bytes or shorter, then click `Initialize on Solana` and approve the devnet wallet transaction. The row records the contest PDA, transaction signature, and initializing admin wallet after backend confirmation. The same admin wallet is displayed on the contest detail page and cannot join that contest as a participant.
 
+End and export a contest from the admin UI:
+
+1. Ensure the contest is initialized on Solana.
+2. Open `/admin?tab=contests`.
+3. Click `End & Export Certificates`.
+4. Connect the same Solana wallet shown as the contest admin wallet.
+5. Approve the `set_join_enabled(false)` transaction to close on-chain joins.
+6. Wait for the UI to update the contest end time, settle the backend contest, and export certificates.
+7. Use the displayed command to publish the exported Merkle root and snapshot hash on-chain.
+
 CLI fallback for initializing a contest PDA:
 
 ```bash

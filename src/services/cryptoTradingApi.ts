@@ -1,5 +1,5 @@
 import { getToken } from '@/services/authApi'
-import { backendFetch, normalizeBackendUrl } from '@/services/httpClient'
+import { backendFetch, normalizeBackendUrl, type BackendFetchOptions } from '@/services/httpClient'
 import type {
   MarketOrderInput,
   SimulatedOrder,
@@ -84,19 +84,28 @@ export interface CertificateClaimStatus {
   claimedAt: string | null
 }
 
-async function cryptoAuthFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function cryptoAuthFetch<T>(
+  path: string,
+  init?: RequestInit,
+  options?: BackendFetchOptions,
+): Promise<T> {
   const token = getToken()
   if (!token) {
     throw new Error('Please sign in to trade')
   }
 
-  return backendFetch<T>(BACKEND_URL, path, {
+  const requestInit = {
     ...init,
     headers: {
       ...(init?.headers || {}),
       Authorization: `Bearer ${token}`,
     },
-  })
+  }
+
+  if (options) {
+    return backendFetch<T>(BACKEND_URL, path, requestInit, options)
+  }
+  return backendFetch<T>(BACKEND_URL, path, requestInit)
 }
 
 export async function joinCryptoContest(contestId: string): Promise<TradingAccount> {
@@ -121,6 +130,7 @@ export async function confirmSolanaJoin(input: {
         join_tx_signature: input.joinTxSignature,
       }),
     },
+    { timeoutMs: 30000 },
   )
 }
 

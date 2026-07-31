@@ -1,8 +1,11 @@
 import json
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable
 from urllib import request
+
+logger = logging.getLogger(__name__)
 
 
 class SolanaJoinError(ValueError):
@@ -57,21 +60,30 @@ class SolanaRpcTransactionVerifier:
         if not self.rpc_url or not self.program_id:
             return False
 
-        response = self.rpc_post(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "getTransaction",
-                "params": [
-                    join_tx_signature,
-                    {
-                        "encoding": "jsonParsed",
-                        "commitment": "confirmed",
-                        "maxSupportedTransactionVersion": 0,
-                    },
-                ],
-            }
-        )
+        try:
+            response = self.rpc_post(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getTransaction",
+                    "params": [
+                        join_tx_signature,
+                        {
+                            "encoding": "jsonParsed",
+                            "commitment": "confirmed",
+                            "maxSupportedTransactionVersion": 0,
+                        },
+                    ],
+                }
+            )
+        except Exception as exc:
+            logger.warning(
+                "Solana join transaction lookup failed contest=%s signature=%s error=%s",
+                contest_slug,
+                join_tx_signature,
+                exc,
+            )
+            return False
         result = response.get("result")
         if not result or result.get("meta", {}).get("err") is not None:
             return False

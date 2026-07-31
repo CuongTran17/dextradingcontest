@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { backendFetch } from '@/services/httpClient'
 import {
+  confirmSolanaJoin,
   confirmCertificateClaim,
   fetchMyCertificate,
   getCryptoAccount,
@@ -101,6 +102,33 @@ describe('cryptoTradingApi', () => {
       'Please sign in to trade',
     )
     expect(backendFetch).not.toHaveBeenCalled()
+  })
+
+  it('uses an extended timeout when confirming a Solana join transaction', async () => {
+    localStorage.setItem('crypto_contest_token', 'token-123')
+    vi.mocked(backendFetch).mockResolvedValue({
+      contest_id: 'summer-cup',
+      wallet_address: 'So11111111111111111111111111111111111111112',
+      wallet_type: 'solana',
+      join_tx_signature: '5'.repeat(88),
+      joined_onchain_at: '2026-07-28T12:00:00+00:00',
+    })
+
+    await confirmSolanaJoin({
+      contestId: 'summer-cup',
+      walletAddress: 'So11111111111111111111111111111111111111112',
+      joinTxSignature: '5'.repeat(88),
+    })
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://backend',
+      '/api/crypto/contests/summer-cup/join/confirm',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { Authorization: 'Bearer token-123' },
+      }),
+      { timeoutMs: 30000 },
+    )
   })
 
   it('fetches my certificate claim status', async () => {

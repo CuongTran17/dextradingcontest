@@ -27,6 +27,15 @@
         {{ connecting ? 'Connecting...' : 'Connect Solana wallet' }}
       </button>
       <button
+        v-if="walletAddress && !joined"
+        data-testid="disconnect-solana-wallet"
+        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        type="button"
+        @click="$emit('disconnect')"
+      >
+        Disconnect wallet
+      </button>
+      <button
         data-testid="join-solana-contest"
         class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         :disabled="joining || joined || !walletAddress"
@@ -64,6 +73,7 @@ const props = withDefaults(
 
 defineEmits<{
   connect: []
+  disconnect: []
   join: []
 }>()
 

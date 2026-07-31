@@ -70,6 +70,17 @@ export interface CertificateExportResult {
   }>
 }
 
+export interface ContestSettlementResult {
+  status: string
+  contest_id: string
+  version: number
+  snapshot_hash: string
+  settlement_prices: Record<string, { price: number; time: number }>
+  rows: Array<Record<string, unknown>>
+  cancelled_orders: Array<Record<string, unknown>>
+  settled_at: string
+}
+
 function adminHeaders(): HeadersInit {
   const token = getToken()
   if (!token) throw new Error('Please sign in as admin')
@@ -260,6 +271,19 @@ export async function exportContestCertificates(
   return backendFetch<CertificateExportResult>(
     BACKEND_URL,
     `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/certificates/export`,
+    {
+      method: 'POST',
+      headers: adminHeaders(),
+    },
+  )
+}
+
+export async function settleAdminCryptoContest(
+  contestId: string,
+): Promise<ContestSettlementResult> {
+  return backendFetch<ContestSettlementResult>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(contestId)}/settle`,
     {
       method: 'POST',
       headers: adminHeaders(),
