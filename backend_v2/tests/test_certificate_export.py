@@ -75,6 +75,7 @@ class FakeRepo:
             for rank in range(1, 12)
         ]
         self.claims = []
+        self.batch = None
         self.committed = False
 
     def get_latest_settlement(self, contest_slug):
@@ -88,6 +89,11 @@ class FakeRepo:
     def add_certificate_claim(self, claim):
         self.claims.append(claim)
         return claim
+
+    def add_certificate_batch(self, batch):
+        batch.id = 91
+        self.batch = batch
+        return batch
 
     def commit(self):
         self.committed = True
@@ -131,4 +137,23 @@ def test_certificate_export_creates_top10_payload_with_metadata_uri():
     assert isinstance(repo.claims[0], CryptoCertificateClaim)
     assert repo.claims[0].certificate_metadata_uri.startswith("ipfs://metadata-")
     assert json.loads(repo.claims[0].merkle_proof_json) == result["claims"][0]["proof"]
+    assert repo.committed is True
+
+
+def test_certificate_export_creates_custom_topn_batch():
+    repo = FakeRepo()
+    pinata = FakePinataClient()
+    renderer = FakeRenderer()
+    service = CertificateExportService(repo, pinata_client=pinata, renderer=renderer)
+
+    result = service.export_batch("summer-cup", top_n=3, exported_by=9)
+
+    assert result["top_n"] == 3
+    assert result["batch_id"] == "91"
+    assert len(result["claims"]) == 3
+    assert [claim["rank"] for claim in result["claims"]] == [1, 2, 3]
+    assert repo.batch.top_n == 3
+    assert repo.batch.merkle_root == result["merkle_root"]
+    assert repo.batch.status == "pending"
+    assert all(claim.batch_id == 91 for claim in repo.claims)
     assert repo.committed is True

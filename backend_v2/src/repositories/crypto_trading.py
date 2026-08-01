@@ -11,6 +11,7 @@ from src.database.crypto_models import (
     ContestParticipant,
     CryptoAccountEvent,
     CryptoAsset,
+    CryptoCertificateBatch,
     CryptoCertificateClaim,
     CryptoContestSettlement,
     CryptoFaucetClaim,
@@ -507,6 +508,57 @@ class CryptoTradingRepository:
     ) -> CryptoCertificateClaim:
         self.db.add(claim)
         return claim
+
+    def add_certificate_batch(
+        self,
+        batch: CryptoCertificateBatch,
+    ) -> CryptoCertificateBatch:
+        self.db.add(batch)
+        self.db.flush()
+        return batch
+
+    def get_certificate_batch(
+        self,
+        contest_slug: str,
+        batch_id: int,
+    ) -> CryptoCertificateBatch | None:
+        return (
+            self.db.query(CryptoCertificateBatch)
+            .join(Contest, Contest.id == CryptoCertificateBatch.contest_id)
+            .filter(
+                Contest.slug == contest_slug,
+                CryptoCertificateBatch.id == batch_id,
+            )
+            .first()
+        )
+
+    def get_latest_authorized_certificate_batch(
+        self,
+        contest_slug: str,
+    ) -> CryptoCertificateBatch | None:
+        return (
+            self.db.query(CryptoCertificateBatch)
+            .join(Contest, Contest.id == CryptoCertificateBatch.contest_id)
+            .filter(
+                Contest.slug == contest_slug,
+                CryptoCertificateBatch.status == "authorized",
+            )
+            .order_by(CryptoCertificateBatch.authorized_at.desc(), CryptoCertificateBatch.id.desc())
+            .first()
+        )
+
+    def authorize_certificate_batch(
+        self,
+        batch: CryptoCertificateBatch,
+        admin_wallet: str,
+        tx_signature: str,
+        authorized_at: datetime,
+    ) -> CryptoCertificateBatch:
+        batch.status = "authorized"
+        batch.authorized_by_wallet = admin_wallet
+        batch.authorize_tx_signature = tx_signature
+        batch.authorized_at = authorized_at
+        return batch
 
     def get_certificate_claim_for_user(
         self,

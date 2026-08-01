@@ -355,17 +355,53 @@ class CryptoContestSettlement(Base):
     contest = relationship("Contest")
 
 
+class CryptoCertificateBatch(Base):
+    __tablename__ = "crypto_certificate_batches"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    contest_id = Column(
+        BigInteger,
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    settlement_id = Column(
+        BigInteger,
+        ForeignKey("crypto_contest_settlements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    top_n = Column(Integer, nullable=False)
+    snapshot_hash = Column(String(64), nullable=False)
+    merkle_root = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="pending")
+    exported_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    authorized_by_wallet = Column(String(64), nullable=True)
+    authorize_tx_signature = Column(String(128), nullable=True)
+    authorized_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    contest = relationship("Contest")
+    settlement = relationship("CryptoContestSettlement")
+
+
 class CryptoCertificateClaim(Base):
     __tablename__ = "crypto_certificate_claims"
     __table_args__ = (
         UniqueConstraint(
-            "contest_id",
+            "batch_id",
             "wallet_address",
-            name="uq_certificate_claim_contest_wallet",
+            name="uq_certificate_claim_batch_wallet",
         ),
     )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    batch_id = Column(
+        BigInteger,
+        ForeignKey("crypto_certificate_batches.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     contest_id = Column(
         BigInteger,
         ForeignKey("contests.id", ondelete="CASCADE"),
@@ -393,6 +429,7 @@ class CryptoCertificateClaim(Base):
     claimed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=_utcnow)
 
+    batch = relationship("CryptoCertificateBatch")
     contest = relationship("Contest")
     participant = relationship("ContestParticipant")
 

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from src.database.crypto_models import CryptoCertificateClaim
+from src.database.crypto_models import CryptoCertificateBatch, CryptoCertificateClaim
 
 
 class CertificateExportError(ValueError):
@@ -23,18 +23,21 @@ def certificate_leaf(
     rank: int,
     metadata_uri: str,
     snapshot_hash: str,
+    batch_id: str | None = None,
+    top_n: int | None = None,
 ) -> bytes:
-    payload = json.dumps(
-        {
-            "contest_id": contest_id,
-            "wallet": wallet,
-            "rank": rank,
-            "metadata_uri": metadata_uri,
-            "snapshot_hash": snapshot_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    payload_data = {
+        "contest_id": contest_id,
+        "wallet": wallet,
+        "rank": rank,
+        "metadata_uri": metadata_uri,
+        "snapshot_hash": snapshot_hash,
+    }
+    if batch_id is not None:
+        payload_data["batch_id"] = batch_id
+    if top_n is not None:
+        payload_data["top_n"] = top_n
+    payload = json.dumps(payload_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).digest()
 
 
@@ -87,7 +90,17 @@ class CertificateExportService:
         contest_slug: str,
         exported_by: int | None = None,
     ) -> dict[str, Any]:
-        del exported_by
+        return self.export_batch(contest_slug, top_n=10, exported_by=exported_by)
+
+    def export_batch(
+        self,
+        contest_slug: str,
+        top_n: int = 10,
+        exported_by: int | None = None,
+    ) -> dict[str, Any]:
+        if top_n < 1 or top_n > 100:
+            raise CertificateExportError("top_n must be between 1 and 100")
+
         settlement = self.repo.get_latest_settlement(contest_slug)
         if settlement is None:
             raise CertificateExportNotFoundError("Contest settlement not found")
@@ -101,12 +114,28 @@ class CertificateExportService:
         rows = sorted(snapshot.get("rows", []), key=lambda row: row["rank"])
         prepared = []
         for row in rows:
-            if len(prepared) >= 10:
+            if len(prepared) >= top_n:
                 break
             participant = participants.get(row["participant_id"])
             if participant is None:
                 continue
             prepared.append((row, participant))
+
+        if not prepared:
+            raise CertificateExportError("No eligible joined wallets found for certificate export")
+
+        batch = CryptoCertificateBatch(
+            contest_id=settlement.contest_id,
+            settlement_id=getattr(settlement, "id", 0),
+            top_n=top_n,
+            snapshot_hash=settlement.snapshot_hash,
+            merkle_root="",
+            status="pending",
+            exported_by=exported_by,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.repo.add_certificate_batch(batch)
+        batch_id = str(batch.id)
 
         claim_payloads = []
         leaves = []
@@ -117,7 +146,7 @@ class CertificateExportService:
                 participant,
                 settlement.snapshot_hash,
             )
-            metadata = self._metadata(snapshot, row, participant, image_uri)
+            metadata = self._metadata(snapshot, row, participant, image_uri, top_n)
             metadata_uri = self.pinata_client.upload_json(
                 f"{contest_slug}-rank-{row['rank']}.json",
                 metadata,
@@ -128,6 +157,8 @@ class CertificateExportService:
                 row["rank"],
                 metadata_uri,
                 settlement.snapshot_hash,
+                batch_id=batch_id,
+                top_n=top_n,
             )
             leaves.append(leaf)
             claim_payloads.append(
@@ -141,12 +172,14 @@ class CertificateExportService:
             )
 
         root = merkle_root(leaves)
+        batch.merkle_root = root.hex()
         response_claims = []
         for index, item in enumerate(claim_payloads):
             row = item["row"]
             participant = item["participant"]
             proof = merkle_proof(leaves, index)
             claim = CryptoCertificateClaim(
+                batch_id=batch.id,
                 contest_id=settlement.contest_id,
                 participant_id=participant.id,
                 wallet_address=participant.wallet_address,
@@ -177,7 +210,9 @@ class CertificateExportService:
 
         self.repo.commit()
         return {
+            "batch_id": batch_id,
             "contest_id": contest_slug,
+            "top_n": top_n,
             "snapshot_hash": settlement.snapshot_hash,
             "merkle_root": root.hex(),
             "claims": response_claims,
@@ -207,7 +242,7 @@ class CertificateExportService:
             "image/png",
         )
 
-    def _metadata(self, snapshot, row, participant, image_uri: str) -> dict[str, Any]:
+    def _metadata(self, snapshot, row, participant, image_uri: str, top_n: int) -> dict[str, Any]:
         contest_title = snapshot["contest"]["title"]
         return {
             "name": f"{contest_title} - Top {row['rank']} Certificate",
@@ -219,6 +254,7 @@ class CertificateExportService:
             "attributes": [
                 {"trait_type": "Contest", "value": contest_title},
                 {"trait_type": "Rank", "value": f"Top {row['rank']}"},
+                {"trait_type": "Top N", "value": str(top_n)},
                 {"trait_type": "Recipient", "value": row["user"]},
                 {
                     "trait_type": "Final Equity",
