@@ -57,6 +57,9 @@ class ContestWalletResponse(BaseModel):
 class CertificateClaimStatusResponse(BaseModel):
     contest_id: str
     eligible: bool
+    batch_id: str | None = None
+    top_n: int | None = None
+    batch_authorized: bool = False
     wallet_address: str | None = None
     rank: int | None = None
     recipient_name: str | None = None
@@ -70,6 +73,7 @@ class CertificateClaimStatusResponse(BaseModel):
 
 
 class CertificateClaimConfirmRequest(BaseModel):
+    batch_id: int
     mint_address: str | None = Field(default=None, max_length=64)
     mint_tx_signature: str = Field(min_length=32, max_length=128)
 

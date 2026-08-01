@@ -568,13 +568,50 @@ class CryptoTradingRepository:
         return (
             self.db.query(CryptoCertificateClaim)
             .join(
+                CryptoCertificateBatch,
+                CryptoCertificateBatch.id == CryptoCertificateClaim.batch_id,
+            )
+            .join(
                 ContestParticipant,
                 ContestParticipant.id == CryptoCertificateClaim.participant_id,
             )
             .join(Contest, Contest.id == CryptoCertificateClaim.contest_id)
+            .options(selectinload(CryptoCertificateClaim.batch))
             .filter(
                 Contest.slug == contest_slug,
                 ContestParticipant.user_id == user_id,
+                CryptoCertificateBatch.status == "authorized",
+            )
+            .order_by(
+                CryptoCertificateBatch.authorized_at.desc(),
+                CryptoCertificateBatch.id.desc(),
+            )
+            .first()
+        )
+
+    def get_certificate_claim_for_user_batch(
+        self,
+        contest_slug: str,
+        user_id: int,
+        batch_id: int,
+    ) -> CryptoCertificateClaim | None:
+        return (
+            self.db.query(CryptoCertificateClaim)
+            .join(
+                CryptoCertificateBatch,
+                CryptoCertificateBatch.id == CryptoCertificateClaim.batch_id,
+            )
+            .join(
+                ContestParticipant,
+                ContestParticipant.id == CryptoCertificateClaim.participant_id,
+            )
+            .join(Contest, Contest.id == CryptoCertificateClaim.contest_id)
+            .options(selectinload(CryptoCertificateClaim.batch))
+            .filter(
+                Contest.slug == contest_slug,
+                ContestParticipant.user_id == user_id,
+                CryptoCertificateClaim.batch_id == batch_id,
+                CryptoCertificateBatch.status == "authorized",
             )
             .first()
         )

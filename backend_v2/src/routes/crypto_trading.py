@@ -66,9 +66,13 @@ def certificate_claim_response(
     contest_id: str,
     claim: CryptoCertificateClaim,
 ) -> CertificateClaimStatusResponse:
+    batch = claim.batch
     return CertificateClaimStatusResponse(
         contest_id=contest_id,
         eligible=True,
+        batch_id=str(claim.batch_id) if claim.batch_id is not None else None,
+        top_n=batch.top_n if batch else None,
+        batch_authorized=bool(batch and batch.status == "authorized"),
         wallet_address=claim.wallet_address,
         rank=claim.rank,
         recipient_name=claim.recipient_name,
@@ -239,7 +243,11 @@ def confirm_my_certificate_claim(
     db: Session = Depends(get_db),
 ):
     repo = CryptoTradingRepository(db)
-    claim = repo.get_certificate_claim_for_user(contest_id, current_user.id)
+    claim = repo.get_certificate_claim_for_user_batch(
+        contest_id,
+        current_user.id,
+        body.batch_id,
+    )
     if claim is None:
         raise HTTPException(status_code=404, detail="Certificate claim not found")
 

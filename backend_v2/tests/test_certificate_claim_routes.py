@@ -16,6 +16,7 @@ from src.database.base import Base
 from src.database.crypto_models import (
     Contest,
     ContestParticipant,
+    CryptoCertificateBatch,
     CryptoCertificateClaim,
 )
 from src.database.db import get_db
@@ -127,14 +128,45 @@ def client(db_session: Session, seeded_user: User):
     return TestClient(app)
 
 
-def test_get_my_certificate_returns_exported_claim(
-    client: TestClient,
+def add_certificate_batch(
+    db_session: Session,
+    seeded_contest: Contest,
+    *,
+    batch_id: int,
+    status: str,
+    top_n: int = 5,
+):
+    batch = CryptoCertificateBatch(
+        id=batch_id,
+        contest_id=seeded_contest.id,
+        settlement_id=1,
+        top_n=top_n,
+        snapshot_hash="aa" * 32,
+        merkle_root="bb" * 32,
+        status=status,
+        authorized_by_wallet="AdminWallet111111111111111111111111111111111"
+        if status == "authorized"
+        else None,
+        authorize_tx_signature="7" * 88 if status == "authorized" else None,
+        authorized_at=datetime.now(timezone.utc) if status == "authorized" else None,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(batch)
+    db_session.flush()
+    return batch
+
+
+def add_certificate_claim(
     db_session: Session,
     seeded_contest: Contest,
     seeded_participant: ContestParticipant,
+    *,
+    claim_id: int,
+    batch_id: int,
 ):
     claim = CryptoCertificateClaim(
-        id=301,
+        id=claim_id,
+        batch_id=batch_id,
         contest_id=seeded_contest.id,
         participant_id=seeded_participant.id,
         wallet_address="So11111111111111111111111111111111111111112",
@@ -150,6 +182,30 @@ def test_get_my_certificate_returns_exported_claim(
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(claim)
+    db_session.flush()
+    return claim
+
+
+def test_get_my_certificate_returns_exported_claim(
+    client: TestClient,
+    db_session: Session,
+    seeded_contest: Contest,
+    seeded_participant: ContestParticipant,
+):
+    add_certificate_batch(
+        db_session,
+        seeded_contest,
+        batch_id=401,
+        status="authorized",
+        top_n=5,
+    )
+    add_certificate_claim(
+        db_session,
+        seeded_contest,
+        seeded_participant,
+        claim_id=301,
+        batch_id=401,
+    )
     db_session.commit()
 
     response = client.get("/api/crypto/contests/practice-arena/certificates/me")
@@ -157,6 +213,9 @@ def test_get_my_certificate_returns_exported_claim(
     assert response.status_code == 200
     body = response.json()
     assert body["eligible"] is True
+    assert body["batch_id"] == "401"
+    assert body["top_n"] == 5
+    assert body["batch_authorized"] is True
     assert body["rank"] == 1
     assert body["wallet_address"] == "So11111111111111111111111111111111111111112"
     assert body["image_uri"] == "ipfs://QmImage"
@@ -179,6 +238,9 @@ def test_get_my_certificate_returns_not_eligible_without_claim(
     assert response.json() == {
         "contest_id": "practice-arena",
         "eligible": False,
+        "batch_id": None,
+        "top_n": None,
+        "batch_authorized": False,
         "wallet_address": None,
         "rank": None,
         "recipient_name": None,
@@ -192,38 +254,76 @@ def test_get_my_certificate_returns_not_eligible_without_claim(
     }
 
 
+def test_get_my_certificate_hides_pending_batch_claim(
+    client: TestClient,
+    db_session: Session,
+    seeded_contest: Contest,
+    seeded_participant: ContestParticipant,
+):
+    add_certificate_batch(
+        db_session,
+        seeded_contest,
+        batch_id=401,
+        status="pending",
+        top_n=5,
+    )
+    add_certificate_claim(
+        db_session,
+        seeded_contest,
+        seeded_participant,
+        claim_id=301,
+        batch_id=401,
+    )
+    db_session.commit()
+
+    response = client.get("/api/crypto/contests/practice-arena/certificates/me")
+
+    assert response.status_code == 200
+    assert response.json()["eligible"] is False
+
+
 def test_confirm_certificate_claim_stores_signature(
     client: TestClient,
     db_session: Session,
     seeded_contest: Contest,
     seeded_participant: ContestParticipant,
 ):
-    claim = CryptoCertificateClaim(
-        id=302,
-        contest_id=seeded_contest.id,
-        participant_id=seeded_participant.id,
-        wallet_address="So11111111111111111111111111111111111111112",
-        rank=1,
-        recipient_name="Alice",
-        final_equity=Decimal("12850.42"),
-        roi=Decimal("28.5042"),
-        snapshot_hash="aa" * 32,
-        certificate_image_uri="ipfs://QmImage",
-        certificate_metadata_uri="ipfs://QmMetadata",
-        merkle_leaf="bb" * 32,
-        merkle_proof_json=json.dumps([]),
-        created_at=datetime.now(timezone.utc),
+    add_certificate_batch(
+        db_session,
+        seeded_contest,
+        batch_id=402,
+        status="authorized",
     )
-    db_session.add(claim)
+    add_certificate_claim(
+        db_session,
+        seeded_contest,
+        seeded_participant,
+        claim_id=302,
+        batch_id=402,
+    )
     db_session.commit()
 
     response = client.post(
         "/api/crypto/contests/practice-arena/certificates/claim/confirm",
-        json={"mint_address": None, "mint_tx_signature": "5" * 88},
+        json={"batch_id": 402, "mint_address": None, "mint_tx_signature": "5" * 88},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["eligible"] is True
+    assert body["batch_id"] == "402"
     assert body["mint_tx_signature"] == "5" * 88
     assert body["claimed_at"]
+
+
+def test_confirm_certificate_claim_requires_batch_id(
+    client: TestClient,
+    seeded_contest: Contest,
+    seeded_participant: ContestParticipant,
+):
+    response = client.post(
+        "/api/crypto/contests/practice-arena/certificates/claim/confirm",
+        json={"mint_address": None, "mint_tx_signature": "5" * 88},
+    )
+
+    assert response.status_code == 422
