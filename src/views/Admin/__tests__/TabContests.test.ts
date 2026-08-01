@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TabContests from '@/views/Admin/components/TabContests.vue'
 import {
+  confirmCertificateBatchAuthorization,
   confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
@@ -11,10 +12,15 @@ import {
   settleAdminCryptoContest,
   updateAdminCryptoContest,
 } from '@/services/cryptoContestApi'
-import { initializeContestOnchain, setContestJoinEnabledOnchain } from '@/services/solanaWallet'
+import {
+  initializeContestOnchain,
+  publishCertificateRootOnchain,
+  setContestJoinEnabledOnchain,
+} from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 vi.mock('@/services/cryptoContestApi', () => ({
+  confirmCertificateBatchAuthorization: vi.fn(),
   confirmContestOnchainInitialize: vi.fn(),
   createAdminCryptoContest: vi.fn(),
   exportContestCertificates: vi.fn(),
@@ -26,6 +32,7 @@ vi.mock('@/services/cryptoContestApi', () => ({
 
 vi.mock('@/services/solanaWallet', () => ({
   initializeContestOnchain: vi.fn(),
+  publishCertificateRootOnchain: vi.fn(),
   setContestJoinEnabledOnchain: vi.fn(),
 }))
 
@@ -46,9 +53,11 @@ describe('TabContests', () => {
   beforeEach(() => {
     vi.mocked(fetchAdminCryptoContests).mockReset()
     vi.mocked(createAdminCryptoContest).mockReset()
+    vi.mocked(confirmCertificateBatchAuthorization).mockReset()
     vi.mocked(confirmContestOnchainInitialize).mockReset()
     vi.mocked(exportContestCertificates).mockReset()
     vi.mocked(initializeContestOnchain).mockReset()
+    vi.mocked(publishCertificateRootOnchain).mockReset()
     vi.mocked(setContestJoinEnabledOnchain).mockReset()
     vi.mocked(settleAdminCryptoContest).mockReset()
     vi.mocked(updateAdminCryptoContest).mockReset()
@@ -135,8 +144,16 @@ describe('TabContests', () => {
   })
 
   it('exports contest certificates and displays root publishing details', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      },
+    ])
     vi.mocked(exportContestCertificates).mockResolvedValue({
+      batch_id: '91',
       contest_id: 'summer-cup',
+      top_n: 5,
       snapshot_hash: 'aa'.repeat(32),
       merkle_root: 'bb'.repeat(32),
       claims: [
@@ -152,17 +169,53 @@ describe('TabContests', () => {
         },
       ],
     })
+    vi.mocked(publishCertificateRootOnchain).mockResolvedValue({
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      signature: '5'.repeat(88),
+    })
+    vi.mocked(confirmCertificateBatchAuthorization).mockResolvedValue({
+      batch_id: '91',
+      contest_id: 'summer-cup',
+      top_n: 5,
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      status: 'authorized',
+      authorized_by_wallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      authorize_tx_signature: '5'.repeat(88),
+      authorized_at: '2026-08-01T10:00:00+00:00',
+    })
 
     const wrapper = mount(TabContests)
     await flushPromises()
+    await wrapper.get('[data-test="certificate-topn-summer-cup"]').setValue(5)
     await wrapper.get('[data-test="export-certificates-summer-cup"]').trigger('click')
     await flushPromises()
 
-    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup')
+    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup', { topN: 5 })
     expect(wrapper.text()).toContain('Merkle root')
     expect(wrapper.text()).toContain('bb'.repeat(32))
     expect(wrapper.text()).toContain('Claims exported: 1')
-    expect(wrapper.text()).toContain('npm run admin -- publish-certificate-root summer-cup')
+    expect(wrapper.text()).toContain('Batch 91')
+
+    await wrapper.get('[data-test="publish-certificate-root"]').trigger('click')
+    await flushPromises()
+
+    expect(publishCertificateRootOnchain).toHaveBeenCalledWith({
+      contestId: 'summer-cup',
+      rootHex: 'bb'.repeat(32),
+      snapshotHashHex: 'aa'.repeat(32),
+      topN: 5,
+      batchId: '91',
+      expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+    })
+    expect(confirmCertificateBatchAuthorization).toHaveBeenCalledWith({
+      contestId: 'summer-cup',
+      batchId: '91',
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      authorizeTxSignature: '5'.repeat(88),
+    })
+    expect(wrapper.text()).toContain('Certificate batch authorized on Solana')
   })
 
   it('initializes a contest on Solana from the admin table', async () => {
@@ -225,7 +278,9 @@ describe('TabContests', () => {
       settled_at: '2026-07-30T10:00:00+00:00',
     })
     vi.mocked(exportContestCertificates).mockResolvedValue({
+      batch_id: '91',
       contest_id: 'summer-cup',
+      top_n: 10,
       snapshot_hash: 'aa'.repeat(32),
       merkle_root: 'bb'.repeat(32),
       claims: [],
@@ -245,7 +300,7 @@ describe('TabContests', () => {
       endsAt: expect.any(String),
     })
     expect(settleAdminCryptoContest).toHaveBeenCalledWith('summer-cup')
-    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup')
+    expect(exportContestCertificates).toHaveBeenCalledWith('summer-cup', { topN: 10 })
     expect(wrapper.text()).toContain('Certificates exported for summer-cup')
     expect(wrapper.text()).toContain('Claims exported: 0')
   })

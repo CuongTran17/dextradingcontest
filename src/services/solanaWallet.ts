@@ -12,6 +12,7 @@ const MIN_JOIN_BALANCE_LAMPORTS = 5_000_000
 const INITIALIZE_CONTEST_DISCRIMINATOR = Uint8Array.from([8, 124, 233, 229, 42, 156, 92, 3])
 const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254, 100, 133])
 const SET_JOIN_ENABLED_DISCRIMINATOR = Uint8Array.from([130, 14, 52, 92, 87, 2, 180, 137])
+const PUBLISH_CERTIFICATE_ROOT_DISCRIMINATOR = Uint8Array.from([142, 166, 41, 131, 130, 127, 48, 25])
 const CLAIM_CERTIFICATE_DISCRIMINATOR = Uint8Array.from([45, 124, 106, 139, 156, 89, 153, 233])
 const textEncoder = new TextEncoder()
 
@@ -19,7 +20,7 @@ interface SolanaWalletProvider {
   isPhantom?: boolean
   isSolflare?: boolean
   publicKey?: PublicKey
-  connect: () => Promise<{ publicKey: PublicKey }>
+  connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: PublicKey }>
   disconnect?: () => Promise<void>
   signAndSendTransaction?: (transaction: Transaction) => Promise<{ signature: string }>
   signTransaction?: (transaction: Transaction) => Promise<Transaction>
@@ -81,6 +82,21 @@ export interface SetContestJoinEnabledOnchainResult {
   signature: string
 }
 
+export interface PublishCertificateRootOnchainInput {
+  contestId: string
+  rootHex: string
+  snapshotHashHex: string
+  topN: number
+  batchId: string
+  expectedAdminWallet?: string
+}
+
+export interface PublishCertificateRootOnchainResult {
+  adminWallet: string
+  contestAddress: string
+  signature: string
+}
+
 function solanaRpcUrl(): string {
   return import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL
 }
@@ -102,7 +118,7 @@ function solanaProvider(): SolanaWalletProvider {
 
 export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> {
   const provider = solanaProvider()
-  const connected = await provider.connect()
+  const connected = await provider.connect({ onlyIfTrusted: false })
   return {
     walletAddress: connected.publicKey.toBase58(),
     walletName: walletProviderName(provider),
@@ -203,6 +219,62 @@ export async function setContestJoinEnabledOnchain(
         Buffer.from(SET_JOIN_ENABLED_DISCRIMINATOR),
         Buffer.from([input.enabled ? 1 : 0]),
       ]),
+    }),
+  )
+  transaction.feePayer = admin
+  transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
+
+  const { signature } = await signAndConfirm(provider, connection, transaction)
+  return {
+    adminWallet: admin.toBase58(),
+    contestAddress: contest.toBase58(),
+    signature,
+  }
+}
+
+export async function publishCertificateRootOnchain(
+  input: PublishCertificateRootOnchainInput,
+): Promise<PublishCertificateRootOnchainResult> {
+  if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
+    throw new Error('Contest id must be 32 bytes or shorter for Solana')
+  }
+  if (!Number.isInteger(input.topN) || input.topN < 1 || input.topN > 100) {
+    throw new Error('Certificate topN must be between 1 and 100')
+  }
+
+  const root = hexToBytes32(input.rootHex, 'Certificate root')
+  const snapshotHash = hexToBytes32(input.snapshotHashHex, 'Snapshot hash')
+  const provider = solanaProvider()
+  const connected = await provider.connect()
+  const admin = connected.publicKey
+  if (input.expectedAdminWallet && admin.toBase58() !== input.expectedAdminWallet) {
+    throw new Error('Connected wallet is not the admin wallet that initialized this contest')
+  }
+
+  const programId = contestProgramId()
+  const contest = PublicKey.findProgramAddressSync(
+    [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
+    programId,
+  )[0]
+  const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
+  if (!contestAccount) {
+    throw new Error(`Contest ${input.contestId} is not initialized on Solana devnet`)
+  }
+
+  const transaction = new Transaction().add(
+    new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: contest, isSigner: false, isWritable: true },
+        { pubkey: admin, isSigner: true, isWritable: false },
+      ],
+      data: encodePublishCertificateRootInstruction({
+        root,
+        snapshotHash,
+        topN: input.topN,
+        batchId: input.batchId,
+      }),
     }),
   )
   transaction.feePayer = admin
@@ -379,6 +451,23 @@ function encodeClaimCertificateInstruction(input: {
     encodeAnchorString(input.metadataUri),
     Buffer.from(input.snapshotHash),
     encodeAnchorVec32(input.proof),
+  ])
+}
+
+function encodePublishCertificateRootInstruction(input: {
+  root: number[]
+  snapshotHash: number[]
+  topN: number
+  batchId: string
+}): Buffer {
+  const topN = Buffer.alloc(2)
+  topN.writeUInt16LE(input.topN, 0)
+  return Buffer.concat([
+    Buffer.from(PUBLISH_CERTIFICATE_ROOT_DISCRIMINATOR),
+    Buffer.from(input.root),
+    Buffer.from(input.snapshotHash),
+    topN,
+    encodeAnchorString(input.batchId),
   ])
 }
 

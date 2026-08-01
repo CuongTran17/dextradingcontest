@@ -81,6 +81,15 @@
                 >
                   Admin wallet {{ shortAddress(contest.onchainAdminWallet) }}
                 </span>
+                <input
+                  class="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                  type="number"
+                  min="1"
+                  max="100"
+                  :data-test="`certificate-topn-${contest.id}`"
+                  :value="certificateTopN(contest.id)"
+                  @change="setCertificateTopN(contest.id, Number(($event.target as HTMLInputElement).value))"
+                >
                 <button
                   class="rounded border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950"
                   type="button"
@@ -88,7 +97,7 @@
                   :disabled="exportingContestId === contest.id"
                   @click="exportCertificates(contest.id)"
                 >
-                  {{ exportingContestId === contest.id ? 'Exporting...' : 'Export Certificates' }}
+                  {{ exportingContestId === contest.id ? 'Exporting...' : 'Export Top N Certificates' }}
                 </button>
                 <button
                   class="rounded border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950"
@@ -113,6 +122,10 @@
       <p class="font-semibold">Certificates exported for {{ certificateExport.contest_id }}</p>
       <dl class="mt-3 grid gap-3 lg:grid-cols-3">
         <div>
+          <dt class="text-xs uppercase text-emerald-700 dark:text-emerald-300">Batch</dt>
+          <dd class="mt-1 font-semibold">Batch {{ certificateExport.batch_id }} · Top {{ certificateExport.top_n }}</dd>
+        </div>
+        <div>
           <dt class="text-xs uppercase text-emerald-700 dark:text-emerald-300">Merkle root</dt>
           <dd class="mt-1 break-all font-mono text-xs">{{ certificateExport.merkle_root }}</dd>
         </div>
@@ -125,9 +138,20 @@
           <dd class="mt-1 font-semibold">Claims exported: {{ certificateExport.claims.length }}</dd>
         </div>
       </dl>
-      <p class="mt-3 break-all rounded border border-emerald-200 bg-white p-3 font-mono text-xs dark:border-emerald-900 dark:bg-gray-950">
-        {{ publishRootCommand }}
-      </p>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          class="rounded bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+          type="button"
+          data-test="publish-certificate-root"
+          :disabled="publishingCertificateRoot"
+          @click="publishCertificateRoot"
+        >
+          {{ publishingCertificateRoot ? 'Publishing...' : 'Publish Root' }}
+        </button>
+        <p v-if="certificateAuthorizationStatus" class="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+          {{ certificateAuthorizationStatus }}
+        </p>
+      </div>
     </div>
 
     <form
@@ -194,9 +218,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 import {
+  confirmCertificateBatchAuthorization,
   confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
@@ -206,7 +231,11 @@ import {
   updateAdminCryptoContest,
   type CertificateExportResult,
 } from '@/services/cryptoContestApi'
-import { initializeContestOnchain, setContestJoinEnabledOnchain } from '@/services/solanaWallet'
+import {
+  initializeContestOnchain,
+  publishCertificateRootOnchain,
+  setContestJoinEnabledOnchain,
+} from '@/services/solanaWallet'
 import type { Contest, CryptoSymbol, RawContestStatus } from '@/types/crypto'
 
 const contests = ref<Contest[]>([])
@@ -217,6 +246,9 @@ const exportingContestId = ref('')
 const initializingContestId = ref('')
 const endingContestId = ref('')
 const certificateExport = ref<CertificateExportResult | null>(null)
+const certificateTopNs = ref<Record<string, number>>({})
+const publishingCertificateRoot = ref(false)
+const certificateAuthorizationStatus = ref('')
 const form = ref({
   slug: '',
   title: '',
@@ -295,8 +327,11 @@ async function changeStatus(contest: Contest, status: RawContestStatus) {
 async function exportCertificates(contestId: string) {
   exportingContestId.value = contestId
   error.value = ''
+  certificateAuthorizationStatus.value = ''
   try {
-    certificateExport.value = await exportContestCertificates(contestId)
+    certificateExport.value = await exportContestCertificates(contestId, {
+      topN: certificateTopN(contestId),
+    })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unable to export certificates'
   } finally {
@@ -340,7 +375,9 @@ async function endAndExportContest(contest: Contest) {
     const endedAt = new Date().toISOString()
     await updateAdminCryptoContest(contest.id, { endsAt: endedAt })
     await settleAdminCryptoContest(contest.id)
-    certificateExport.value = await exportContestCertificates(contest.id)
+    certificateExport.value = await exportContestCertificates(contest.id, {
+      topN: certificateTopN(contest.id),
+    })
     contests.value = contests.value.map((item) =>
       item.id === contest.id
         ? {
@@ -355,6 +392,40 @@ async function endAndExportContest(contest: Contest) {
     error.value = err instanceof Error ? err.message : 'Unable to end and export contest'
   } finally {
     endingContestId.value = ''
+  }
+}
+
+async function publishCertificateRoot() {
+  if (!certificateExport.value) return
+  const contest = contests.value.find((item) => item.id === certificateExport.value?.contest_id)
+  if (!contest?.onchainAdminWallet) {
+    error.value = 'Initialize this contest on Solana before publishing certificate roots'
+    return
+  }
+
+  publishingCertificateRoot.value = true
+  error.value = ''
+  certificateAuthorizationStatus.value = ''
+  try {
+    const onchain = await publishCertificateRootOnchain({
+      contestId: certificateExport.value.contest_id,
+      rootHex: certificateExport.value.merkle_root,
+      snapshotHashHex: certificateExport.value.snapshot_hash,
+      topN: certificateExport.value.top_n,
+      batchId: certificateExport.value.batch_id,
+      expectedAdminWallet: contest.onchainAdminWallet,
+    })
+    await confirmCertificateBatchAuthorization({
+      contestId: certificateExport.value.contest_id,
+      batchId: certificateExport.value.batch_id,
+      adminWallet: onchain.adminWallet,
+      authorizeTxSignature: onchain.signature,
+    })
+    certificateAuthorizationStatus.value = 'Certificate batch authorized on Solana'
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unable to publish certificate root'
+  } finally {
+    publishingCertificateRoot.value = false
   }
 }
 
@@ -416,13 +487,15 @@ function shortAddress(address: string): string {
   return `${address.slice(0, 4)}...${address.slice(-4)}`
 }
 
-const publishRootCommand = computed(() => {
-  if (!certificateExport.value) return ''
-  return [
-    'npm run admin -- publish-certificate-root',
-    certificateExport.value.contest_id,
-    certificateExport.value.merkle_root,
-    certificateExport.value.snapshot_hash,
-  ].join(' ')
-})
+function certificateTopN(contestId: string): number {
+  return certificateTopNs.value[contestId] ?? 10
+}
+
+function setCertificateTopN(contestId: string, value: number) {
+  const normalized = Number.isFinite(value) ? Math.trunc(value) : 10
+  certificateTopNs.value = {
+    ...certificateTopNs.value,
+    [contestId]: Math.min(100, Math.max(1, normalized)),
+  }
+}
 </script>

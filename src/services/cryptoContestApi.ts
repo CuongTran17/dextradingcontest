@@ -55,7 +55,9 @@ interface BackendAdminContestParticipant {
 }
 
 export interface CertificateExportResult {
+  batch_id: string
   contest_id: string
+  top_n: number
   snapshot_hash: string
   merkle_root: string
   claims: Array<{
@@ -68,6 +70,18 @@ export interface CertificateExportResult {
     merkle_leaf: string
     proof: string[]
   }>
+}
+
+export interface CertificateBatchAuthorizationResult {
+  batch_id: string
+  contest_id: string
+  top_n: number
+  snapshot_hash: string
+  merkle_root: string
+  status: string
+  authorized_by_wallet: string | null
+  authorize_tx_signature: string | null
+  authorized_at: string | null
 }
 
 export interface ContestSettlementResult {
@@ -267,6 +281,7 @@ export async function setAdminContestParticipantStatus(
 
 export async function exportContestCertificates(
   contestId: string,
+  options: { topN?: number } = {},
 ): Promise<CertificateExportResult> {
   return backendFetch<CertificateExportResult>(
     BACKEND_URL,
@@ -274,6 +289,27 @@ export async function exportContestCertificates(
     {
       method: 'POST',
       headers: adminHeaders(),
+      body: JSON.stringify({ top_n: options.topN ?? 10 }),
+    },
+  )
+}
+
+export async function confirmCertificateBatchAuthorization(input: {
+  contestId: string
+  batchId: string
+  adminWallet: string
+  authorizeTxSignature: string
+}): Promise<CertificateBatchAuthorizationResult> {
+  return backendFetch<CertificateBatchAuthorizationResult>(
+    BACKEND_URL,
+    `/api/admin/crypto/contests/${encodeURIComponent(input.contestId)}/certificates/batches/${encodeURIComponent(input.batchId)}/authorize/confirm`,
+    {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        admin_wallet: input.adminWallet,
+        authorize_tx_signature: input.authorizeTxSignature,
+      }),
     },
   )
 }

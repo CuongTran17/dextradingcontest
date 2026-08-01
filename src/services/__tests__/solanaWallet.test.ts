@@ -6,6 +6,7 @@ import {
   connectSolanaWallet,
   initializeContestOnchain,
   joinContestOnchain,
+  publishCertificateRootOnchain,
   setContestJoinEnabledOnchain,
 } from '@/services/solanaWallet'
 
@@ -18,15 +19,17 @@ describe('solanaWallet', () => {
 
   it('connects Phantom and returns the connected wallet address', async () => {
     const publicKey = new PublicKey('So11111111111111111111111111111111111111112')
+    const connect = vi.fn(async () => ({ publicKey }))
     window.solana = {
       isPhantom: true,
-      connect: async () => ({ publicKey }),
+      connect,
     }
 
     await expect(connectSolanaWallet()).resolves.toEqual({
       walletAddress: 'So11111111111111111111111111111111111111112',
       walletName: 'Phantom',
     })
+    expect(connect).toHaveBeenCalledWith({ onlyIfTrusted: false })
   })
 
   it('asks the user to install a Solana wallet when no provider exists', async () => {
@@ -272,6 +275,84 @@ describe('solanaWallet', () => {
       }),
     ).rejects.toThrow('Connected wallet is not the admin wallet that initialized this contest')
     expect(signAndSendTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects certificate root publish when root is not 32 bytes', async () => {
+    await expect(
+      publishCertificateRootOnchain({
+        contestId: 'summer-cup',
+        rootHex: 'bb',
+        snapshotHashHex: 'aa'.repeat(32),
+        topN: 5,
+        batchId: '91',
+        expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      }),
+    ).rejects.toThrow('Certificate root must be 32 bytes')
+  })
+
+  it('builds and sends the publish certificate root instruction', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue({
+      data: Buffer.alloc(0),
+    } as never)
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'confirmTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null },
+    })
+    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
+      new PublicKey('11111111111111111111111111111111'),
+      255,
+    ])
+
+    const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    const sentTransactions: unknown[] = []
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: admin }),
+      signAndSendTransaction: async (transaction) => {
+        sentTransactions.push(transaction)
+        return { signature: '5'.repeat(88) }
+      },
+    }
+
+    await expect(
+      publishCertificateRootOnchain({
+        contestId: 'summer-cup',
+        rootHex: 'bb'.repeat(32),
+        snapshotHashHex: 'aa'.repeat(32),
+        topN: 5,
+        batchId: '91',
+        expectedAdminWallet: admin.toBase58(),
+      }),
+    ).resolves.toEqual({
+      adminWallet: admin.toBase58(),
+      contestAddress: '11111111111111111111111111111111',
+      signature: '5'.repeat(88),
+    })
+
+    const transaction = sentTransactions[0] as {
+      instructions: Array<{
+        data: Buffer
+        programId: PublicKey
+        keys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
+      }>
+    }
+    const instruction = transaction.instructions[0]
+    const instructionData = Buffer.from(instruction.data)
+    expect(instruction.programId.toBase58()).toBe('9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    expect([...instructionData.subarray(0, 8)]).toEqual([142, 166, 41, 131, 130, 127, 48, 25])
+    expect([...instructionData.subarray(8, 40)]).toEqual(Array.from(Buffer.from('bb'.repeat(32), 'hex')))
+    expect([...instructionData.subarray(40, 72)]).toEqual(Array.from(Buffer.from('aa'.repeat(32), 'hex')))
+    expect(instructionData.readUInt16LE(72)).toBe(5)
+    expect(instructionData.includes(Buffer.from('91'))).toBe(true)
+    expect(instruction.keys).toEqual([
+      { pubkey: new PublicKey('11111111111111111111111111111111'), isSigner: false, isWritable: true },
+      { pubkey: admin, isSigner: true, isWritable: false },
+    ])
   })
 
   it('rejects certificate claim when snapshot hash is not 32 bytes', async () => {

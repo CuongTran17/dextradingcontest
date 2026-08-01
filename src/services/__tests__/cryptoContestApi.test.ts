@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  confirmCertificateBatchAuthorization,
   confirmContestOnchainInitialize,
   createAdminCryptoContest,
   exportContestCertificates,
@@ -194,7 +195,9 @@ describe('cryptoContestApi', () => {
 
   it('exports contest certificates with bearer auth', async () => {
     vi.mocked(backendFetch).mockResolvedValue({
+      batch_id: '91',
       contest_id: 'summer-cup',
+      top_n: 5,
       snapshot_hash: 'aa'.repeat(32),
       merkle_root: 'bb'.repeat(32),
       claims: [
@@ -211,7 +214,7 @@ describe('cryptoContestApi', () => {
       ],
     })
 
-    const result = await exportContestCertificates('summer-cup')
+    const result = await exportContestCertificates('summer-cup', { topN: 5 })
 
     expect(backendFetch).toHaveBeenCalledWith(
       'http://localhost:8000',
@@ -219,10 +222,48 @@ describe('cryptoContestApi', () => {
       {
         method: 'POST',
         headers: { Authorization: 'Bearer token-123' },
+        body: JSON.stringify({ top_n: 5 }),
       },
     )
+    expect(result.batch_id).toBe('91')
+    expect(result.top_n).toBe(5)
     expect(result.merkle_root).toBe('bb'.repeat(32))
     expect(result.claims).toHaveLength(1)
+  })
+
+  it('confirms certificate batch authorization with bearer auth', async () => {
+    vi.mocked(backendFetch).mockResolvedValue({
+      batch_id: '91',
+      contest_id: 'summer-cup',
+      top_n: 5,
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      status: 'authorized',
+      authorized_by_wallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      authorize_tx_signature: '5'.repeat(88),
+      authorized_at: '2026-08-01T10:00:00+00:00',
+    })
+
+    const result = await confirmCertificateBatchAuthorization({
+      contestId: 'summer-cup',
+      batchId: '91',
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      authorizeTxSignature: '5'.repeat(88),
+    })
+
+    expect(backendFetch).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      '/api/admin/crypto/contests/summer-cup/certificates/batches/91/authorize/confirm',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer token-123' },
+        body: JSON.stringify({
+          admin_wallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+          authorize_tx_signature: '5'.repeat(88),
+        }),
+      },
+    )
+    expect(result.status).toBe('authorized')
   })
 
   it('settles an admin contest with bearer auth', async () => {
