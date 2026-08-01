@@ -7,6 +7,7 @@ from src.database.crypto_models import CryptoCertificateClaim
 from src.database.user_models import User  # noqa: F401
 from src.services.certificate_export import (
     CertificateExportService,
+    CertificateExportValidationError,
     certificate_leaf,
     merkle_proof,
     merkle_root,
@@ -76,6 +77,9 @@ class FakeRepo:
         ]
         self.claims = []
         self.batch = None
+        self.contest = SimpleNamespace(
+            onchain_admin_wallet="AdminWallet111111111111111111111111111111111"
+        )
         self.committed = False
 
     def get_latest_settlement(self, contest_slug):
@@ -93,6 +97,29 @@ class FakeRepo:
     def add_certificate_batch(self, batch):
         batch.id = 91
         self.batch = batch
+        return batch
+
+    def get_contest_by_slug(self, contest_slug):
+        assert contest_slug == "summer-cup"
+        return self.contest
+
+    def get_certificate_batch(self, contest_slug, batch_id):
+        assert contest_slug == "summer-cup"
+        if batch_id != 91:
+            return None
+        return self.batch
+
+    def authorize_certificate_batch(
+        self,
+        batch,
+        admin_wallet,
+        tx_signature,
+        authorized_at,
+    ):
+        batch.status = "authorized"
+        batch.authorized_by_wallet = admin_wallet
+        batch.authorize_tx_signature = tx_signature
+        batch.authorized_at = authorized_at
         return batch
 
     def commit(self):
@@ -157,3 +184,39 @@ def test_certificate_export_creates_custom_topn_batch():
     assert repo.batch.status == "pending"
     assert all(claim.batch_id == 91 for claim in repo.claims)
     assert repo.committed is True
+
+
+def test_certificate_batch_authorization_requires_contest_admin_wallet():
+    repo = FakeRepo()
+    service = CertificateExportService(
+        repo,
+        pinata_client=FakePinataClient(),
+        renderer=FakeRenderer(),
+    )
+    service.export_batch("summer-cup", top_n=3, exported_by=9)
+
+    try:
+        service.authorize_batch(
+            "summer-cup",
+            91,
+            "WrongWallet111111111111111111111111111111111",
+            "s" * 64,
+        )
+    except CertificateExportValidationError as exc:
+        assert "on-chain admin wallet" in str(exc)
+    else:
+        raise AssertionError("wrong admin wallet should not authorize a batch")
+
+    result = service.authorize_batch(
+        "summer-cup",
+        91,
+        "AdminWallet111111111111111111111111111111111",
+        "s" * 64,
+    )
+
+    assert result["status"] == "authorized"
+    assert result["authorized_by_wallet"] == (
+        "AdminWallet111111111111111111111111111111111"
+    )
+    assert result["authorize_tx_signature"] == "s" * 64
+    assert repo.batch.status == "authorized"

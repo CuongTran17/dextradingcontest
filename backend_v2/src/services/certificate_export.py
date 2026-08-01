@@ -17,6 +17,10 @@ class CertificateExportNotFoundError(CertificateExportError):
     pass
 
 
+class CertificateExportValidationError(CertificateExportError):
+    pass
+
+
 def certificate_leaf(
     contest_id: str,
     wallet: str,
@@ -216,6 +220,51 @@ class CertificateExportService:
             "snapshot_hash": settlement.snapshot_hash,
             "merkle_root": root.hex(),
             "claims": response_claims,
+        }
+
+    def authorize_batch(
+        self,
+        contest_slug: str,
+        batch_id: int,
+        admin_wallet: str,
+        tx_signature: str,
+    ) -> dict[str, Any]:
+        contest = self.repo.get_contest_by_slug(contest_slug)
+        if contest is None:
+            raise CertificateExportNotFoundError("Contest not found")
+
+        batch = self.repo.get_certificate_batch(contest_slug, batch_id)
+        if batch is None:
+            raise CertificateExportNotFoundError("Certificate batch not found")
+
+        expected_wallet = getattr(contest, "onchain_admin_wallet", None)
+        if not expected_wallet:
+            raise CertificateExportValidationError("Contest is not initialized on-chain")
+        if admin_wallet != expected_wallet:
+            raise CertificateExportValidationError(
+                "Only the contest on-chain admin wallet can authorize this batch"
+            )
+
+        authorized_at = datetime.now(timezone.utc)
+        self.repo.authorize_certificate_batch(
+            batch,
+            admin_wallet,
+            tx_signature,
+            authorized_at,
+        )
+        self.repo.commit()
+        return {
+            "batch_id": str(batch.id),
+            "contest_id": contest_slug,
+            "top_n": batch.top_n,
+            "snapshot_hash": batch.snapshot_hash,
+            "merkle_root": batch.merkle_root,
+            "status": batch.status,
+            "authorized_by_wallet": batch.authorized_by_wallet,
+            "authorize_tx_signature": batch.authorize_tx_signature,
+            "authorized_at": batch.authorized_at.isoformat()
+            if batch.authorized_at
+            else None,
         }
 
     def _render_and_upload_image(

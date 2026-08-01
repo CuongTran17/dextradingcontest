@@ -37,6 +37,15 @@ class ContestOnchainInitializeConfirmRequest(BaseModel):
     admin_wallet: str = Field(min_length=32, max_length=64)
 
 
+class CertificateExportRequest(BaseModel):
+    top_n: int = Field(default=10, ge=1, le=100)
+
+
+class CertificateBatchAuthorizeConfirmRequest(BaseModel):
+    admin_wallet: str = Field(min_length=32, max_length=64)
+    authorize_tx_signature: str = Field(min_length=32, max_length=128)
+
+
 class ContestWalletResponse(BaseModel):
     contest_id: str
     wallet_address: str | None

@@ -8,6 +8,8 @@ from src.database.db import get_db
 from src.database.user_models import User
 from src.repositories.crypto_trading import CryptoTradingRepository
 from src.schemas.crypto_trading import (
+    CertificateBatchAuthorizeConfirmRequest,
+    CertificateExportRequest,
     ContestCreate,
     ContestOnchainInitializeConfirmRequest,
     ContestUpdate,
@@ -29,8 +31,10 @@ from src.services.crypto_settlement import (
     SettlementPriceUnavailableError,
 )
 from src.services.certificate_export import (
+    CertificateExportError,
     CertificateExportNotFoundError,
     CertificateExportService,
+    CertificateExportValidationError,
 )
 from src.services.certificate_renderer import CertificateImageRenderer
 from src.services.pinata_client import PinataClient
@@ -342,13 +346,41 @@ def admin_get_crypto_contest_settlement(
 @router.post("/crypto/contests/{contest_id}/certificates/export")
 def admin_export_crypto_contest_certificates(
     contest_id: str,
+    body: CertificateExportRequest | None = None,
     current_user: User = Depends(_require_admin),
     service: CertificateExportService = Depends(get_certificate_export_service),
 ):
     try:
-        return service.export_top10(contest_id, exported_by=current_user.id)
+        top_n = body.top_n if body is not None else 10
+        return service.export_batch(contest_id, top_n=top_n, exported_by=current_user.id)
     except CertificateExportNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CertificateExportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/crypto/contests/{contest_id}/certificates/batches/{batch_id}/authorize/confirm"
+)
+def admin_confirm_crypto_contest_certificate_batch_authorization(
+    contest_id: str,
+    batch_id: int,
+    body: CertificateBatchAuthorizeConfirmRequest,
+    current_user: User = Depends(_require_admin),
+    service: CertificateExportService = Depends(get_certificate_export_service),
+):
+    del current_user
+    try:
+        return service.authorize_batch(
+            contest_id,
+            batch_id,
+            body.admin_wallet,
+            body.authorize_tx_signature,
+        )
+    except CertificateExportNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CertificateExportValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/crypto/contests/{contest_id}/participants")
