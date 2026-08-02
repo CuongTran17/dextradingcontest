@@ -1,7 +1,9 @@
 import {
   Connection,
+  Keypair,
   PublicKey,
   SystemProgram,
+  SYSVAR_RENT_PUBKEY,
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js'
@@ -14,6 +16,9 @@ const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254,
 const SET_JOIN_ENABLED_DISCRIMINATOR = Uint8Array.from([130, 14, 52, 92, 87, 2, 180, 137])
 const PUBLISH_CERTIFICATE_ROOT_DISCRIMINATOR = Uint8Array.from([142, 166, 41, 131, 130, 127, 48, 25])
 const CLAIM_CERTIFICATE_DISCRIMINATOR = Uint8Array.from([45, 124, 106, 139, 156, 89, 153, 233])
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
+const TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 const textEncoder = new TextEncoder()
 
 interface SolanaWalletProvider {
@@ -55,6 +60,7 @@ export interface ClaimCertificateOnchainInput {
 
 export interface ClaimCertificateOnchainResult {
   signature: string
+  mintAddress: string
 }
 
 export interface ConnectSolanaWalletResult {
@@ -396,6 +402,19 @@ export async function claimCertificateOnchain(
     [textEncoder.encode('certificate'), contest.toBuffer(), wallet.toBuffer()],
     programId,
   )[0]
+  const mint = Keypair.generate()
+  const tokenAccount = PublicKey.findProgramAddressSync(
+    [wallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.publicKey.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )[0]
+  const metadata = PublicKey.findProgramAddressSync(
+    [
+      textEncoder.encode('metadata'),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mint.publicKey.toBuffer(),
+    ],
+    TOKEN_METADATA_PROGRAM_ID,
+  )[0]
   const data = encodeClaimCertificateInstruction({
     contestId: input.contestId,
     batchId: input.batchId,
@@ -412,16 +431,25 @@ export async function claimCertificateOnchain(
       keys: [
         { pubkey: contest, isSigner: false, isWritable: false },
         { pubkey: certificate, isSigner: false, isWritable: true },
+        { pubkey: mint.publicKey, isSigner: true, isWritable: true },
+        { pubkey: tokenAccount, isSigner: false, isWritable: true },
+        { pubkey: metadata, isSigner: false, isWritable: true },
         { pubkey: wallet, isSigner: true, isWritable: true },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_METADATA_PROGRAM_ID, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
       ],
       data,
     }),
   )
   transaction.feePayer = wallet
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
+  transaction.partialSign(mint)
 
-  return signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(provider, connection, transaction)
+  return { signature, mintAddress: mint.publicKey.toBase58() }
 }
 
 async function signAndConfirm(

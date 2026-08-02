@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from '@solana/web3.js'
+import { Connection, PublicKey, Transaction } from '@solana/web3.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -372,17 +372,26 @@ describe('solanaWallet', () => {
 
   it('builds and sends the claim certificate instruction', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    const contest = new PublicKey('11111111111111111111111111111111')
+    const certificate = new PublicKey('SysvarRent111111111111111111111111111111111')
+    const tokenAccount = new PublicKey('So11111111111111111111111111111111111111112')
+    const metadata = new PublicKey('Vote111111111111111111111111111111111111111')
     vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
-      blockhash: '11111111111111111111111111111111',
+      blockhash: 'EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k',
       lastValidBlockHeight: 1,
     })
     vi.spyOn(Connection.prototype, 'confirmTransaction').mockResolvedValue({
       context: { slot: 1 },
       value: { err: null },
     })
+    const partialSign = vi
+      .spyOn(Transaction.prototype, 'partialSign')
+      .mockImplementation(() => undefined)
     vi.spyOn(PublicKey, 'findProgramAddressSync')
-      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
-      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+      .mockReturnValueOnce([contest, 255])
+      .mockReturnValueOnce([certificate, 254])
+      .mockReturnValueOnce([tokenAccount, 253])
+      .mockReturnValueOnce([metadata, 252])
 
     const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
@@ -395,27 +404,69 @@ describe('solanaWallet', () => {
       },
     }
 
-    await expect(
-      claimCertificateOnchain({
-        contestId: 'practice-arena',
-        batchId: '91',
-        topN: 5,
-        walletPublicKey: wallet.toBase58(),
-        rank: 1,
-        metadataUri: 'ipfs://QmMetadata',
-        snapshotHash: 'aa'.repeat(32),
-        proof: [],
-      }),
-    ).resolves.toEqual({ signature: '5'.repeat(88) })
+    const result = await claimCertificateOnchain({
+      contestId: 'practice-arena',
+      batchId: '91',
+      topN: 5,
+      walletPublicKey: wallet.toBase58(),
+      rank: 1,
+      metadataUri: 'ipfs://QmMetadata',
+      snapshotHash: 'aa'.repeat(32),
+      proof: [],
+    })
+    expect(result.signature).toBe('5'.repeat(88))
+    expect(result.mintAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)
+    expect(partialSign).toHaveBeenCalledOnce()
 
-    const transaction = sentTransactions[0] as { instructions: Array<{ data: Buffer, programId: PublicKey }> }
+    const transaction = sentTransactions[0] as {
+      instructions: Array<{
+        data: Buffer
+        programId: PublicKey
+        keys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
+      }>
+    }
     const instruction = transaction.instructions[0]
     const instructionData = Buffer.from(instruction.data)
     expect(instruction.programId.toBase58()).toBe('9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    expect(instruction.keys[2].pubkey.toBase58()).toBe(result.mintAddress)
     expect([...instructionData.subarray(0, 8)]).toEqual([45, 124, 106, 139, 156, 89, 153, 233])
     expect(instructionData.includes(Buffer.from('practice-arena'))).toBe(true)
     expect(instructionData.includes(Buffer.from('91'))).toBe(true)
     expect(instructionData.includes(Buffer.from([5, 0]))).toBe(true)
     expect(instructionData.includes(Buffer.from('ipfs://QmMetadata'))).toBe(true)
+    expect(instruction.keys[0]).toEqual({ pubkey: contest, isSigner: false, isWritable: false })
+    expect(instruction.keys[1]).toEqual({ pubkey: certificate, isSigner: false, isWritable: true })
+    expect(instruction.keys[2].pubkey.toBase58()).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)
+    expect(instruction.keys[2].isSigner).toBe(true)
+    expect(instruction.keys[2].isWritable).toBe(true)
+    expect(instruction.keys).toEqual([
+      { pubkey: contest, isSigner: false, isWritable: false },
+      { pubkey: certificate, isSigner: false, isWritable: true },
+      instruction.keys[2],
+      { pubkey: tokenAccount, isSigner: false, isWritable: true },
+      { pubkey: metadata, isSigner: false, isWritable: true },
+      { pubkey: wallet, isSigner: true, isWritable: true },
+      {
+        pubkey: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        isSigner: false,
+        isWritable: false,
+      },
+      {
+        pubkey: new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'),
+        isSigner: false,
+        isWritable: false,
+      },
+      {
+        pubkey: new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'),
+        isSigner: false,
+        isWritable: false,
+      },
+      { pubkey: new PublicKey('11111111111111111111111111111111'), isSigner: false, isWritable: false },
+      {
+        pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'),
+        isSigner: false,
+        isWritable: false,
+      },
+    ])
   })
 })

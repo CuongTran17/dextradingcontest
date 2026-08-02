@@ -143,6 +143,7 @@ async function claim() {
       contestId: contestId.value,
       batchId: certificate.value.batchId,
       mintTxSignature: onchainClaim.signature,
+      mintAddress: onchainClaim.mintAddress,
     })
   } catch (claimError) {
     error.value = claimError instanceof Error ? claimError.message : 'Unable to claim certificate'

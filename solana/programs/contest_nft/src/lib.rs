@@ -1,4 +1,12 @@
 use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    metadata::{
+        create_metadata_accounts_v3, mpl_token_metadata::types::DataV2,
+        CreateMetadataAccountsV3, Metadata,
+    },
+    token::{mint_to, Mint, MintTo, Token, TokenAccount},
+};
 use solana_sha256_hasher::hashv;
 
 declare_id!("9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx");
@@ -127,9 +135,57 @@ pub mod contest_nft {
             ContestNftError::InvalidMerkleProof
         );
 
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"contest",
+            ctx.accounts.contest.contest_id.as_bytes(),
+            &[ctx.accounts.contest.bump],
+        ]];
+
+        mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.token_account.to_account_info(),
+                    authority: ctx.accounts.contest.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            1,
+        )?;
+
+        create_metadata_accounts_v3(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_metadata_program.to_account_info(),
+                CreateMetadataAccountsV3 {
+                    metadata: ctx.accounts.metadata.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    mint_authority: ctx.accounts.contest.to_account_info(),
+                    payer: ctx.accounts.wallet.to_account_info(),
+                    update_authority: ctx.accounts.contest.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            DataV2 {
+                name: certificate_name(&ctx.accounts.contest.contest_id, rank),
+                symbol: "CDTC".to_string(),
+                uri: metadata_uri.clone(),
+                seller_fee_basis_points: 0,
+                creators: None,
+                collection: None,
+                uses: None,
+            },
+            true,
+            true,
+            None,
+        )?;
+
         let certificate = &mut ctx.accounts.certificate;
         certificate.contest = ctx.accounts.contest.key();
         certificate.wallet = ctx.accounts.wallet.key();
+        certificate.mint = ctx.accounts.mint.key();
         certificate.batch_id = batch_id;
         certificate.top_n = top_n;
         certificate.rank = rank;
@@ -216,9 +272,40 @@ pub struct ClaimCertificate<'info> {
         bump
     )]
     pub certificate: Account<'info, CertificateClaim>,
+    #[account(
+        init,
+        payer = wallet,
+        mint::decimals = 0,
+        mint::authority = contest,
+        mint::freeze_authority = contest
+    )]
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = wallet,
+        associated_token::mint = mint,
+        associated_token::authority = wallet
+    )]
+    pub token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [
+            b"metadata",
+            token_metadata_program.key().as_ref(),
+            mint.key().as_ref()
+        ],
+        bump,
+        seeds::program = token_metadata_program.key()
+    )]
+    /// CHECK: The Metaplex token metadata program validates and owns this PDA.
+    pub metadata: UncheckedAccount<'info>,
     #[account(mut)]
     pub wallet: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub token_metadata_program: Program<'info, Metadata>,
     pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[account]
@@ -254,6 +341,7 @@ impl Participant {
 pub struct CertificateClaim {
     pub contest: Pubkey,
     pub wallet: Pubkey,
+    pub mint: Pubkey,
     pub batch_id: String,
     pub top_n: u16,
     pub rank: u8,
@@ -265,7 +353,7 @@ pub struct CertificateClaim {
 
 impl CertificateClaim {
     pub const LEN: usize =
-        8 + 32 + 32 + 4 + MAX_BATCH_ID_LEN + 2 + 1 + 4 + MAX_METADATA_URI_LEN + 32 + 8 + 1;
+        8 + 32 + 32 + 32 + 4 + MAX_BATCH_ID_LEN + 2 + 1 + 4 + MAX_METADATA_URI_LEN + 32 + 8 + 1;
 }
 
 fn certificate_leaf(
@@ -313,6 +401,16 @@ fn hex_lower(bytes: &[u8; 32]) -> String {
         out.push(HEX[(byte & 0x0f) as usize] as char);
     }
     out
+}
+
+fn certificate_name(contest_id: &str, rank: u8) -> String {
+    let suffix = format!(" #{}", rank);
+    let max_prefix_len = 32usize.saturating_sub(suffix.as_bytes().len());
+    let mut prefix = contest_id.to_string();
+    if prefix.as_bytes().len() > max_prefix_len {
+        prefix.truncate(max_prefix_len);
+    }
+    format!("{}{}", prefix, suffix)
 }
 
 #[error_code]

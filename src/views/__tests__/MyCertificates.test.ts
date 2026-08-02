@@ -59,7 +59,10 @@ describe('MyCertificates', () => {
       claimedAt: null,
     })
     vi.mocked(claimCertificateOnchain).mockReset()
-    vi.mocked(claimCertificateOnchain).mockResolvedValue({ signature: '5'.repeat(88) })
+    vi.mocked(claimCertificateOnchain).mockResolvedValue({
+      signature: '5'.repeat(88),
+      mintAddress: 'Mint111111111111111111111111111111111111111',
+    })
     vi.mocked(confirmCertificateClaim).mockReset()
     vi.mocked(confirmCertificateClaim).mockResolvedValue({
       contestId: 'practice-arena',
@@ -74,7 +77,7 @@ describe('MyCertificates', () => {
       metadataUri: 'ipfs://QmMetadata',
       snapshotHash: 'aa'.repeat(32),
       proof: [],
-      mintAddress: null,
+      mintAddress: 'Mint111111111111111111111111111111111111111',
       mintTxSignature: '5'.repeat(88),
       claimedAt: '2026-07-30T10:00:00+00:00',
     })
@@ -110,6 +113,7 @@ describe('MyCertificates', () => {
       contestId: 'practice-arena',
       batchId: '401',
       mintTxSignature: '5'.repeat(88),
+      mintAddress: 'Mint111111111111111111111111111111111111111',
     })
     expect(wrapper.text()).toContain('Claimed')
   })
