@@ -20,6 +20,42 @@ describe("admin script helpers", () => {
     });
   });
 
+  it("parses publish-certificate-root batch arguments", () => {
+    assert.deepEqual(
+      parseAdminArgs([
+        "publish-certificate-root",
+        "practice-arena",
+        "01".repeat(32),
+        "02".repeat(32),
+        "5",
+        "91",
+      ]),
+      {
+        kind: "publish-certificate-root",
+        contestId: "practice-arena",
+        root: Array.from(Buffer.alloc(32, 1)),
+        snapshotHash: Array.from(Buffer.alloc(32, 2)),
+        topN: 5,
+        batchId: "91",
+      },
+    );
+  });
+
+  it("rejects invalid publish-certificate-root topN", () => {
+    assert.throws(
+      () =>
+        parseAdminArgs([
+          "publish-certificate-root",
+          "practice-arena",
+          "01".repeat(32),
+          "02".repeat(32),
+          "0",
+          "91",
+        ]),
+      /topN must be between 1 and 100/,
+    );
+  });
+
   it("normalizes 32-byte hex inputs", () => {
     assert.deepEqual(hex32("0x" + "ab".repeat(32), "root"), Array.from(Buffer.alloc(32, 0xab)));
   });
@@ -61,9 +97,14 @@ function fakeProgram() {
           rpc: () => rpc(`join:${enabled}`),
         }),
       }),
-      publishCertificateRoot: (root: number[], snapshotHash: number[]) => ({
+      publishCertificateRoot: (
+        root: number[],
+        snapshotHash: number[],
+        topN: number,
+        batchId: string,
+      ) => ({
         accounts: () => ({
-          rpc: () => rpc(`root:${root.length}:${snapshotHash.length}`),
+          rpc: () => rpc(`root:${root.length}:${snapshotHash.length}:${topN}:${batchId}`),
         }),
       }),
     },
@@ -89,9 +130,11 @@ describe("admin script dispatch", () => {
         contestId: "practice-arena",
         root: Array.from(Buffer.alloc(32, 1)),
         snapshotHash: Array.from(Buffer.alloc(32, 2)),
+        topN: 5,
+        batchId: "91",
       },
       { program: program as any },
     );
-    assert.equal(signature, "root:32:32-signature");
+    assert.equal(signature, "root:32:32:5:91-signature");
   });
 });

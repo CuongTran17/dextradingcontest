@@ -4,8 +4,10 @@ use solana_sha256_hasher::hashv;
 declare_id!("9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx");
 
 const MAX_CONTEST_ID_LEN: usize = 32;
+const MAX_BATCH_ID_LEN: usize = 32;
 const MAX_METADATA_URI_LEN: usize = 200;
 const MAX_MERKLE_PROOF_LEN: usize = 16;
+const MAX_CERTIFICATE_TOP_N: u16 = 100;
 
 #[program]
 pub mod contest_nft {
@@ -26,6 +28,8 @@ pub mod contest_nft {
         contest.join_enabled = true;
         contest.certificate_root = [0; 32];
         contest.snapshot_hash = [0; 32];
+        contest.certificate_top_n = 0;
+        contest.certificate_batch_id = String::new();
         contest.bump = ctx.bumps.contest;
         Ok(())
     }
@@ -54,15 +58,30 @@ pub mod contest_nft {
         ctx: Context<PublishCertificateRoot>,
         root: [u8; 32],
         snapshot_hash: [u8; 32],
+        top_n: u16,
+        batch_id: String,
     ) -> Result<()> {
+        require!(
+            (1..=MAX_CERTIFICATE_TOP_N).contains(&top_n),
+            ContestNftError::CertificateTopNInvalid
+        );
+        require!(
+            batch_id.as_bytes().len() <= MAX_BATCH_ID_LEN,
+            ContestNftError::BatchIdTooLong
+        );
+
         ctx.accounts.contest.certificate_root = root;
         ctx.accounts.contest.snapshot_hash = snapshot_hash;
+        ctx.accounts.contest.certificate_top_n = top_n;
+        ctx.accounts.contest.certificate_batch_id = batch_id;
         Ok(())
     }
 
     pub fn claim_certificate(
         ctx: Context<ClaimCertificate>,
         contest_id: String,
+        batch_id: String,
+        top_n: u16,
         rank: u8,
         metadata_uri: String,
         snapshot_hash: [u8; 32],
@@ -71,6 +90,14 @@ pub mod contest_nft {
         require!(
             contest_id == ctx.accounts.contest.contest_id,
             ContestNftError::ContestMismatch
+        );
+        require!(
+            batch_id == ctx.accounts.contest.certificate_batch_id,
+            ContestNftError::CertificateBatchMismatch
+        );
+        require!(
+            top_n == ctx.accounts.contest.certificate_top_n,
+            ContestNftError::CertificateTopNMismatch
         );
         require!(
             metadata_uri.as_bytes().len() <= MAX_METADATA_URI_LEN,
@@ -87,7 +114,9 @@ pub mod contest_nft {
 
         let leaf = certificate_leaf(
             &contest_id,
+            &batch_id,
             &ctx.accounts.wallet.key().to_string(),
+            top_n,
             rank,
             &metadata_uri,
             &snapshot_hash,
@@ -101,6 +130,8 @@ pub mod contest_nft {
         let certificate = &mut ctx.accounts.certificate;
         certificate.contest = ctx.accounts.contest.key();
         certificate.wallet = ctx.accounts.wallet.key();
+        certificate.batch_id = batch_id;
+        certificate.top_n = top_n;
         certificate.rank = rank;
         certificate.metadata_uri = metadata_uri;
         certificate.snapshot_hash = snapshot_hash;
@@ -197,11 +228,14 @@ pub struct ContestState {
     pub join_enabled: bool,
     pub certificate_root: [u8; 32],
     pub snapshot_hash: [u8; 32],
+    pub certificate_top_n: u16,
+    pub certificate_batch_id: String,
     pub bump: u8,
 }
 
 impl ContestState {
-    pub const LEN: usize = 8 + 32 + 4 + MAX_CONTEST_ID_LEN + 1 + 32 + 32 + 1;
+    pub const LEN: usize =
+        8 + 32 + 4 + MAX_CONTEST_ID_LEN + 1 + 32 + 32 + 2 + 4 + MAX_BATCH_ID_LEN + 1;
 }
 
 #[account]
@@ -220,6 +254,8 @@ impl Participant {
 pub struct CertificateClaim {
     pub contest: Pubkey,
     pub wallet: Pubkey,
+    pub batch_id: String,
+    pub top_n: u16,
     pub rank: u8,
     pub metadata_uri: String,
     pub snapshot_hash: [u8; 32],
@@ -228,22 +264,27 @@ pub struct CertificateClaim {
 }
 
 impl CertificateClaim {
-    pub const LEN: usize = 8 + 32 + 32 + 1 + 4 + MAX_METADATA_URI_LEN + 32 + 8 + 1;
+    pub const LEN: usize =
+        8 + 32 + 32 + 4 + MAX_BATCH_ID_LEN + 2 + 1 + 4 + MAX_METADATA_URI_LEN + 32 + 8 + 1;
 }
 
 fn certificate_leaf(
     contest_id: &str,
+    batch_id: &str,
     wallet: &str,
+    top_n: u16,
     rank: u8,
     metadata_uri: &str,
     snapshot_hash: &[u8; 32],
 ) -> [u8; 32] {
     let payload = format!(
-        "{{\"contest_id\":\"{}\",\"metadata_uri\":\"{}\",\"rank\":{},\"snapshot_hash\":\"{}\",\"wallet\":\"{}\"}}",
+        "{{\"batch_id\":\"{}\",\"contest_id\":\"{}\",\"metadata_uri\":\"{}\",\"rank\":{},\"snapshot_hash\":\"{}\",\"top_n\":{},\"wallet\":\"{}\"}}",
+        batch_id,
         contest_id,
         metadata_uri,
         rank,
         hex_lower(snapshot_hash),
+        top_n,
         wallet
     );
     hashv(&[payload.as_bytes()]).to_bytes()
@@ -284,6 +325,14 @@ pub enum ContestNftError {
     ContestMismatch,
     #[msg("Certificate metadata URI is too long")]
     MetadataUriTooLong,
+    #[msg("Certificate batch id is too long")]
+    BatchIdTooLong,
+    #[msg("Certificate topN must be between 1 and 100")]
+    CertificateTopNInvalid,
+    #[msg("Certificate batch id does not match")]
+    CertificateBatchMismatch,
+    #[msg("Certificate topN does not match")]
+    CertificateTopNMismatch,
     #[msg("Merkle proof is too long")]
     ProofTooLong,
     #[msg("Certificate snapshot hash does not match")]

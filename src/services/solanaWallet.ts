@@ -44,8 +44,8 @@ export interface JoinContestOnchainResult {
 
 export interface ClaimCertificateOnchainInput {
   contestId: string
-  batchId?: string
-  topN?: number
+  batchId: string
+  topN: number
   walletPublicKey: string
   rank: number
   metadataUri: string
@@ -376,6 +376,9 @@ export async function claimCertificateOnchain(
   if (!Number.isInteger(input.rank) || input.rank < 0 || input.rank > 255) {
     throw new Error('Certificate rank must fit in one byte')
   }
+  if (!Number.isInteger(input.topN) || input.topN < 1 || input.topN > 100) {
+    throw new Error('Certificate topN must be between 1 and 100')
+  }
 
   const provider = solanaProvider()
   const connected = await provider.connect()
@@ -395,6 +398,8 @@ export async function claimCertificateOnchain(
   )[0]
   const data = encodeClaimCertificateInstruction({
     contestId: input.contestId,
+    batchId: input.batchId,
+    topN: input.topN,
     rank: input.rank,
     metadataUri: input.metadataUri,
     snapshotHash,
@@ -441,14 +446,20 @@ async function signAndConfirm(
 
 function encodeClaimCertificateInstruction(input: {
   contestId: string
+  batchId: string
+  topN: number
   rank: number
   metadataUri: string
   snapshotHash: number[]
   proof: number[][]
 }): Buffer {
+  const topN = Buffer.alloc(2)
+  topN.writeUInt16LE(input.topN, 0)
   return Buffer.concat([
     Buffer.from(CLAIM_CERTIFICATE_DISCRIMINATOR),
     encodeAnchorString(input.contestId),
+    encodeAnchorString(input.batchId),
+    topN,
     Buffer.from([input.rank]),
     encodeAnchorString(input.metadataUri),
     Buffer.from(input.snapshotHash),

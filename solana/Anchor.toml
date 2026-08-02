@@ -15,5 +15,8 @@ url = "https://api.apr.dev"
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
+[test]
+startup_wait = 20000
+
 [scripts]
 test = "npm run test"

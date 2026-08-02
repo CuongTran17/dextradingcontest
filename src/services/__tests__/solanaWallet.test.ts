@@ -359,6 +359,8 @@ describe('solanaWallet', () => {
     await expect(
       claimCertificateOnchain({
         contestId: 'practice-arena',
+        batchId: '91',
+        topN: 5,
         walletPublicKey: 'So11111111111111111111111111111111111111112',
         rank: 1,
         metadataUri: 'ipfs://QmMetadata',
@@ -396,6 +398,8 @@ describe('solanaWallet', () => {
     await expect(
       claimCertificateOnchain({
         contestId: 'practice-arena',
+        batchId: '91',
+        topN: 5,
         walletPublicKey: wallet.toBase58(),
         rank: 1,
         metadataUri: 'ipfs://QmMetadata',
@@ -410,6 +414,8 @@ describe('solanaWallet', () => {
     expect(instruction.programId.toBase58()).toBe('9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     expect([...instructionData.subarray(0, 8)]).toEqual([45, 124, 106, 139, 156, 89, 153, 233])
     expect(instructionData.includes(Buffer.from('practice-arena'))).toBe(true)
+    expect(instructionData.includes(Buffer.from('91'))).toBe(true)
+    expect(instructionData.includes(Buffer.from([5, 0]))).toBe(true)
     expect(instructionData.includes(Buffer.from('ipfs://QmMetadata'))).toBe(true)
   })
 })

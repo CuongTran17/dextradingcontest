@@ -11,6 +11,8 @@ describe("contest_nft certificate claim", () => {
   const contestId = `claim-cup-${Date.now()}`;
   const metadataUri = "ipfs://QmCertificateMetadata";
   const rank = 1;
+  const batchId = "91";
+  const topN = 5;
   const snapshotHash = Array.from(Buffer.alloc(32, 7));
 
   function contestPda() {
@@ -37,10 +39,12 @@ describe("contest_nft certificate claim", () => {
 
   function certificateLeaf() {
     const payload = JSON.stringify({
+      batch_id: batchId,
       contest_id: contestId,
       metadata_uri: metadataUri,
       rank,
       snapshot_hash: hex(snapshotHash),
+      top_n: topN,
       wallet: provider.wallet.publicKey.toBase58(),
     });
     return Array.from(createHash("sha256").update(payload).digest());
@@ -61,15 +65,49 @@ describe("contest_nft certificate claim", () => {
       .rpc();
 
     await program.methods
-      .publishCertificateRoot(root, snapshotHash)
+      .publishCertificateRoot(root, snapshotHash, topN, batchId)
       .accounts({
         contest,
         admin: provider.wallet.publicKey,
       })
       .rpc();
 
+    const contestAccount = await (program.account as any).contestState.fetch(contest);
+    assert.equal(contestAccount.certificateTopN, topN);
+    assert.equal(contestAccount.certificateBatchId, batchId);
+
+    try {
+      await program.methods
+        .claimCertificate(contestId, "92", topN, rank, metadataUri, snapshotHash, [])
+        .accounts({
+          contest,
+          certificate,
+          wallet: provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+      assert.fail("claim with wrong batch id should fail");
+    } catch (error) {
+      assert.match(String(error), /Certificate batch id does not match|custom program error|Error/i);
+    }
+
+    try {
+      await program.methods
+        .claimCertificate(contestId, batchId, topN + 1, rank, metadataUri, snapshotHash, [])
+        .accounts({
+          contest,
+          certificate,
+          wallet: provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+      assert.fail("claim with wrong topN should fail");
+    } catch (error) {
+      assert.match(String(error), /Certificate topN does not match|custom program error|Error/i);
+    }
+
     await program.methods
-      .claimCertificate(contestId, rank, metadataUri, snapshotHash, [])
+      .claimCertificate(contestId, batchId, topN, rank, metadataUri, snapshotHash, [])
       .accounts({
         contest,
         certificate,
@@ -81,11 +119,13 @@ describe("contest_nft certificate claim", () => {
     const account = await (program.account as any).certificateClaim.fetch(certificate);
     assert.equal(account.wallet.toBase58(), provider.wallet.publicKey.toBase58());
     assert.equal(account.rank, rank);
+    assert.equal(account.batchId, batchId);
+    assert.equal(account.topN, topN);
     assert.equal(account.metadataUri, metadataUri);
 
     try {
       await program.methods
-        .claimCertificate(contestId, rank, metadataUri, snapshotHash, [])
+        .claimCertificate(contestId, batchId, topN, rank, metadataUri, snapshotHash, [])
         .accounts({
           contest,
           certificate,

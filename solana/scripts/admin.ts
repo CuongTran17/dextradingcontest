@@ -10,10 +10,12 @@ export type AdminCommand =
       contestId: string;
       root: number[];
       snapshotHash: number[];
+      topN: number;
+      batchId: string;
     };
 
 export function parseAdminArgs(argv: string[]): AdminCommand {
-  const [command, contestId, firstValue, secondValue] = argv;
+  const [command, contestId, firstValue, secondValue, thirdValue, fourthValue] = argv;
   if (!contestId) throw new Error("contest id is required");
   if (Buffer.byteLength(contestId, "utf8") > 32) {
     throw new Error("contest id must be at most 32 bytes");
@@ -29,14 +31,23 @@ export function parseAdminArgs(argv: string[]): AdminCommand {
     return { kind: "set-join-enabled", contestId, enabled: firstValue === "true" };
   }
   if (command === "publish-certificate-root") {
-    if (!firstValue || !secondValue) {
-      throw new Error("root and snapshot hash are required");
+    if (!firstValue || !secondValue || !thirdValue || !fourthValue) {
+      throw new Error("root, snapshot hash, topN, and batch id are required");
+    }
+    const topN = Number(thirdValue);
+    if (!Number.isInteger(topN) || topN < 1 || topN > 100) {
+      throw new Error("topN must be between 1 and 100");
+    }
+    if (Buffer.byteLength(fourthValue, "utf8") > 32) {
+      throw new Error("batch id must be at most 32 bytes");
     }
     return {
       kind: "publish-certificate-root",
       contestId,
       root: hex32(firstValue, "root"),
       snapshotHash: hex32(secondValue, "snapshot hash"),
+      topN,
+      batchId: fourthValue,
     };
   }
   throw new Error("unknown admin command");
@@ -85,7 +96,12 @@ export async function runAdminCommand(command: AdminCommand, deps: AdminDeps): P
   }
 
   return deps.program.methods
-    .publishCertificateRoot(command.root, command.snapshotHash)
+    .publishCertificateRoot(
+      command.root,
+      command.snapshotHash,
+      command.topN,
+      command.batchId,
+    )
     .accounts({ contest, admin })
     .rpc();
 }
