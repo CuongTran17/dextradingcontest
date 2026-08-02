@@ -264,7 +264,7 @@ class CryptoContestService:
             "symbols": [asset.symbol for asset in enabled_assets],
             "starts_at": _iso(contest.starts_at),
             "ends_at": _iso(contest.ends_at),
-            "participant_count": len(contest.participants),
+            "participant_count": int(getattr(contest, "_participant_count", 0)),
             "onchain_contest_address": contest.onchain_contest_address,
             "onchain_initialize_tx_signature": contest.onchain_initialize_tx_signature,
             "onchain_admin_wallet": contest.onchain_admin_wallet,

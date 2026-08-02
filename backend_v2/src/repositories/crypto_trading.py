@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from src.database.crypto_models import (
@@ -39,20 +39,37 @@ class CryptoTradingRepository:
         )
 
     def list_contests(self) -> list[Contest]:
-        return (
-            self.db.query(Contest)
+        participant_counts = (
+            self.db.query(
+                ContestParticipant.contest_id.label("contest_id"),
+                func.count(ContestParticipant.id).label("participant_count"),
+            )
+            .group_by(ContestParticipant.contest_id)
+            .subquery()
+        )
+        rows = (
+            self.db.query(Contest, func.coalesce(participant_counts.c.participant_count, 0))
+            .outerjoin(participant_counts, participant_counts.c.contest_id == Contest.id)
             .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
             .order_by(Contest.starts_at.desc(), Contest.id.desc())
             .all()
         )
+        contests: list[Contest] = []
+        for contest, participant_count in rows:
+            contest._participant_count = int(participant_count or 0)
+            contests.append(contest)
+        return contests
 
     def get_contest_by_slug(self, slug: str) -> Contest | None:
-        return (
+        contest = (
             self.db.query(Contest)
             .options(selectinload(Contest.assets).selectinload(ContestAsset.asset))
             .filter(Contest.slug == slug)
             .first()
         )
+        if contest is not None:
+            contest._participant_count = self._participant_count(contest.id)
+        return contest
 
     def get_contest_for_settlement(self, slug: str) -> Contest | None:
         return (
@@ -195,9 +212,9 @@ class CryptoTradingRepository:
             .filter(TradingAccount.status == "active")
             .count()
         )
-        total_equity = sum(
-            float(row[0] or 0)
-            for row in self.db.query(TradingAccount.current_equity).all()
+        total_equity = float(
+            self.db.query(func.coalesce(func.sum(TradingAccount.current_equity), 0)).scalar()
+            or 0
         )
         return {
             "users_total": users_total,
@@ -210,6 +227,14 @@ class CryptoTradingRepository:
             "accounts_active": accounts_active,
             "total_equity": round(total_equity, 2),
         }
+
+    def _participant_count(self, contest_id: int) -> int:
+        return int(
+            self.db.query(func.count(ContestParticipant.id))
+            .filter(ContestParticipant.contest_id == contest_id)
+            .scalar()
+            or 0
+        )
 
     def get_contest_participant_by_user(
         self,

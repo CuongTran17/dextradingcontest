@@ -96,11 +96,15 @@ Copy-Item backend_v2\.env.example backend_v2\.env
 
 Set `MYSQL_URL`, `MYSQL_ASYNC_URL`, and a long random `JWT_SECRET` in
 `backend_v2\.env`. Keep the default DuckDB path unless the warehouse should live elsewhere.
-Market repair is enabled by default with `CRYPTO_REPAIR_ON_STARTUP=true`; it checks the
-existing DuckDB warehouse on backend startup and pulls only missing Binance `1m` ranges.
-Order reconciliation is enabled by default with `CRYPTO_PENDING_ORDER_RECONCILE_ON_STARTUP=true`
-and `CRYPTO_ORDER_RECONCILE_INTERVAL_SECONDS=30`; it checks pending limit orders and TP/SL
-controls after market repair catches up.
+For a responsive local admin UI, keep background market repair and order reconciliation off:
+
+```env
+CRYPTO_REPAIR_ON_STARTUP=false
+CRYPTO_PENDING_ORDER_RECONCILE_ON_STARTUP=false
+```
+
+Set them to `true` only when you want the backend to repair missing Binance `1m` ranges or
+continuously reconcile pending limit orders and TP/SL controls.
 
 For Solana devnet and certificate export, set:
 

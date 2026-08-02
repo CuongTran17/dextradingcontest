@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
@@ -242,3 +242,29 @@ def test_service_builds_admin_overview(db_session):
     assert overview["accounts"]["total"] == 1
     assert overview["accounts"]["active"] == 1
     assert overview["accounts"]["total_equity"] == 10100.0
+
+
+def test_admin_overview_sums_equity_in_sql(db_session):
+    seed_account(db_session)
+    statements: list[str] = []
+    event.listen(
+        db_session.bind,
+        "before_cursor_execute",
+        lambda _conn, _cursor, statement, _params, _context, _executemany: statements.append(statement),
+    )
+    repo = CryptoTradingRepository(db_session)
+
+    counts = repo.admin_overview_counts()
+
+    assert counts["total_equity"] == 10100.0
+    equity_queries = [
+        statement.lower()
+        for statement in statements
+        if "trading_accounts" in statement.lower()
+        and "current_equity" in statement.lower()
+    ]
+    assert any("sum(" in statement for statement in equity_queries)
+    assert not any(
+        "select trading_accounts.current_equity" in statement
+        for statement in equity_queries
+    )

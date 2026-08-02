@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
@@ -91,6 +91,80 @@ def test_repository_lists_contests_with_enabled_symbols(db_session):
     assert len(rows) == 1
     assert rows[0].slug == "practice-arena"
     assert [asset.asset.symbol for asset in rows[0].assets] == ["BTCUSDT", "ETHUSDT"]
+
+
+def test_service_lists_contests_without_lazy_loading_participants(db_session):
+    user = User(
+        id=201,
+        email="student@example.com",
+        password_hash="hash",
+        fullname="Student",
+        role="user",
+    )
+    btc = CryptoAsset(
+        id=201,
+        exchange="binance",
+        market_type="spot",
+        symbol="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price_precision=2,
+        quantity_precision=6,
+        min_quantity=Decimal("0.000001"),
+        min_notional=Decimal("5"),
+        is_active=True,
+    )
+    contests = [
+        Contest(
+            id=201 + index,
+            slug=f"contest-{index}",
+            title=f"Contest {index}",
+            mode="practice",
+            status="active",
+            initial_balance=Decimal("10000"),
+            quote_asset="USDT_TEST",
+            starts_at=datetime(2026, 6, 1 + index, tzinfo=timezone.utc),
+            ends_at=datetime(2026, 7, 1 + index, tzinfo=timezone.utc),
+            fee_rate=Decimal("0.001"),
+            rules_json="{}",
+        )
+        for index in range(2)
+    ]
+    for index, contest in enumerate(contests):
+        contest.assets.append(ContestAsset(id=201 + index, asset=btc, is_enabled=True))
+    participants = [
+        ContestParticipant(
+            id=201 + index,
+            contest_id=contest.id,
+            user_id=201,
+            status="active",
+        )
+        for index, contest in enumerate(contests)
+    ]
+    db_session.add_all([user, btc, *contests, *participants])
+    db_session.commit()
+    statements: list[str] = []
+    event.listen(
+        db_session.bind,
+        "before_cursor_execute",
+        lambda _conn, _cursor, statement, _params, _context, _executemany: statements.append(statement),
+    )
+    Session = sessionmaker(bind=db_session.bind)
+    request_session = Session()
+    try:
+        service = CryptoContestService(CryptoTradingRepository(request_session))
+        rows = service.list_contests()
+    finally:
+        request_session.close()
+
+    assert [row["participant_count"] for row in rows] == [1, 1]
+    lazy_participant_selects = [
+        statement.lower()
+        for statement in statements
+        if "from contest_participants" in statement.lower()
+        and "where ? = contest_participants.contest_id" in statement.lower()
+    ]
+    assert lazy_participant_selects == []
 
 
 def test_leaderboard_ranks_accounts_by_cash_plus_position_value(db_session):
@@ -417,4 +491,3 @@ def test_leaderboard_caches_and_force_refreshes(db_session):
     third_rows = service.get_leaderboard("practice-arena", force_refresh=True)
     assert third_rows[0]["equity"] == 13000.0  # 8000 + 0.1 * 50000 = 13000
     assert call_count == 2
-
