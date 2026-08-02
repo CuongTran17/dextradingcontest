@@ -19,12 +19,14 @@ class PendingOrderProcessor:
         *,
         db_session_factory: Callable[[], Any],
         market_repo: CryptoMarketDuckDB | None = None,
+        market_repo_factory: Callable[[], Any] = CryptoMarketDuckDB,
         enabled: bool = True,
         interval_seconds: int = 30,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.db_session_factory = db_session_factory
-        self.market_repo = market_repo or CryptoMarketDuckDB()
+        self._market_repo = market_repo
+        self._market_repo_factory = market_repo_factory
         self.enabled = enabled
         self.interval_seconds = interval_seconds
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
@@ -82,6 +84,12 @@ class PendingOrderProcessor:
             "last_result": self._last_result,
             "last_error": self._last_error,
         }
+
+    @property
+    def market_repo(self) -> Any:
+        if self._market_repo is None:
+            self._market_repo = self._market_repo_factory()
+        return self._market_repo
 
     async def _run_loop(self) -> None:
         while True:

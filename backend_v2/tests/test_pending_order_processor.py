@@ -23,6 +23,11 @@ class FakeMarketRepo:
         return self.candles
 
 
+class ExplodingMarketRepo:
+    def load_candles(self, *args, **kwargs):
+        raise AssertionError("disabled processor should not open the market repo")
+
+
 def _order(side, limit_price):
     return SimpleNamespace(
         side=side,
@@ -139,3 +144,13 @@ def test_pending_processor_prefers_stop_loss_when_both_hit_same_candle():
     assert processor._exit_trigger_for_order(
         _entry_order(stop_loss_price=96, take_profit_price=110)
     ) == ("stop_loss", Decimal("96"))
+
+
+def test_disabled_pending_processor_does_not_open_market_repo():
+    processor = PendingOrderProcessor(
+        db_session_factory=lambda: None,
+        market_repo_factory=lambda: ExplodingMarketRepo(),
+        enabled=False,
+    )
+
+    assert processor.status()["enabled"] is False
