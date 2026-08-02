@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --port 5174 --strictPort",
     "backend:dev": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe -m uvicorn src.main:app --reload",
+    "backend:dev:fast": "cd backend_v2 && set DB_MIGRATIONS_ENABLED=false&& set CRYPTO_REALTIME_ON_STARTUP=false&& set CRYPTO_REPAIR_ON_STARTUP=false&& set CRYPTO_PENDING_ORDER_RECONCILE_ON_STARTUP=false&& ..\\.venv\\Scripts\\python.exe -m uvicorn src.main:app --reload",
+    "backend:migrate": "cd backend_v2 && ..\\.venv\\Scripts\\python.exe -m alembic upgrade head",
     "crypto:backfill": ".\\.venv\\Scripts\\python.exe backend_v2\\scripts\\backfill_crypto_market.py",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",

@@ -50,10 +50,15 @@ def build_lifespan(
         app.state.crypto_market_repair = repair
         app.state.leaderboard_broadcast = leaderboard
         app.state.pending_order_processor = pending_processor
-        step_started_at = time.perf_counter()
-        logger.info("backend startup: realtime start")
-        await realtime.start()
-        logger.info("backend startup: realtime done duration_ms=%.1f", _elapsed_ms(step_started_at))
+        realtime_started = False
+        if settings.crypto_realtime_on_startup:
+            step_started_at = time.perf_counter()
+            logger.info("backend startup: realtime start")
+            await realtime.start()
+            realtime_started = True
+            logger.info("backend startup: realtime done duration_ms=%.1f", _elapsed_ms(step_started_at))
+        else:
+            logger.info("backend startup: realtime skipped")
         step_started_at = time.perf_counter()
         logger.info("backend startup: pending processor start")
         await pending_processor.start()
@@ -75,7 +80,8 @@ def build_lifespan(
             await leaderboard.stop()
             await pending_processor.stop()
             await repair.stop()
-            await realtime.stop()
+            if realtime_started:
+                await realtime.stop()
 
     return lifespan
 

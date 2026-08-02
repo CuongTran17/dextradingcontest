@@ -100,11 +100,14 @@ For a responsive local admin UI, keep background market repair and order reconci
 
 ```env
 CRYPTO_REPAIR_ON_STARTUP=false
+CRYPTO_REALTIME_ON_STARTUP=false
 CRYPTO_PENDING_ORDER_RECONCILE_ON_STARTUP=false
 ```
 
 Set them to `true` only when you want the backend to repair missing Binance `1m` ranges or
-continuously reconcile pending limit orders and TP/SL controls.
+continuously reconcile pending limit orders and TP/SL controls. Keep
+`CRYPTO_REALTIME_ON_STARTUP=false` when local network access to Binance WebSocket is blocked
+or when you only need admin/contest APIs.
 
 For Solana devnet and certificate export, set:
 
@@ -168,6 +171,19 @@ Run the backend:
 
 ```powershell
 npm.cmd run backend:dev
+```
+
+For normal local UI work after migrations are already applied, use the fast dev server. It
+skips startup migrations and disables background market jobs for that process only:
+
+```powershell
+npm.cmd run backend:dev:fast
+```
+
+Apply migrations manually after pulling schema changes:
+
+```powershell
+npm.cmd run backend:migrate
 ```
 
 Run the frontend in another terminal:

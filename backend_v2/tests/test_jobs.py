@@ -59,3 +59,53 @@ async def test_lifespan_starts_and_stops_crypto_market_repair():
         "repair_stop",
         "realtime_stop",
     ]
+
+
+@pytest.mark.anyio
+async def test_lifespan_can_skip_realtime_startup(monkeypatch):
+    events = []
+
+    class FakeRealtime:
+        async def start(self):
+            events.append("realtime_start")
+
+        async def stop(self):
+            events.append("realtime_stop")
+
+    class FakeRepair:
+        async def start(self):
+            events.append("repair_start")
+
+        async def stop(self):
+            events.append("repair_stop")
+
+    class FakePendingProcessor:
+        async def start(self):
+            events.append("pending_start")
+
+        async def stop(self):
+            events.append("pending_stop")
+
+    monkeypatch.setattr(
+        "src.jobs.get_settings",
+        lambda: SimpleNamespace(crypto_realtime_on_startup=False),
+    )
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    lifespan = build_lifespan(
+        init_db=lambda: events.append("init_db"),
+        realtime_factory=lambda: FakeRealtime(),
+        repair_factory=lambda: FakeRepair(),
+        pending_processor_factory=lambda: FakePendingProcessor(),
+    )
+
+    async with lifespan(app):
+        assert events == ["init_db", "pending_start", "repair_start"]
+
+    assert events == [
+        "init_db",
+        "pending_start",
+        "repair_start",
+        "pending_stop",
+        "repair_stop",
+    ]
