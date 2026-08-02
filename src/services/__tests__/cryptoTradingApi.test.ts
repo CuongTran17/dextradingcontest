@@ -136,6 +136,9 @@ describe('cryptoTradingApi', () => {
     vi.mocked(backendFetch).mockResolvedValue({
       contest_id: 'practice-arena',
       eligible: true,
+      batch_id: '401',
+      top_n: 5,
+      batch_authorized: true,
       wallet_address: 'So11111111111111111111111111111111111111112',
       rank: 1,
       recipient_name: 'Alice',
@@ -158,6 +161,9 @@ describe('cryptoTradingApi', () => {
       }),
     )
     expect(result.eligible).toBe(true)
+    expect(result.batchId).toBe('401')
+    expect(result.topN).toBe(5)
+    expect(result.batchAuthorized).toBe(true)
     expect(result.imageUri).toBe('ipfs://QmImage')
   })
 
@@ -166,6 +172,9 @@ describe('cryptoTradingApi', () => {
     vi.mocked(backendFetch).mockResolvedValue({
       contest_id: 'practice-arena',
       eligible: true,
+      batch_id: '401',
+      top_n: 5,
+      batch_authorized: true,
       wallet_address: 'So11111111111111111111111111111111111111112',
       rank: 1,
       recipient_name: 'Alice',
@@ -180,11 +189,13 @@ describe('cryptoTradingApi', () => {
 
     const result = await confirmCertificateClaim({
       contestId: 'practice-arena',
+      batchId: '401',
       mintTxSignature: '5'.repeat(88),
     })
 
     const request = vi.mocked(backendFetch).mock.calls[0][2]
     expect(JSON.parse(request?.body as string)).toEqual({
+      batch_id: 401,
       mint_address: null,
       mint_tx_signature: '5'.repeat(88),
     })

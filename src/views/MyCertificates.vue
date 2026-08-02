@@ -36,6 +36,12 @@
 
           <dl class="grid gap-3 sm:grid-cols-2">
             <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
+              <dt class="text-xs text-gray-500 dark:text-gray-400">Batch</dt>
+              <dd class="mt-1 break-all font-medium text-gray-900 dark:text-white">
+                {{ certificate.batchId ? `Batch ${certificate.batchId} · Top ${certificate.topN}` : 'Pending' }}
+              </dd>
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
               <dt class="text-xs text-gray-500 dark:text-gray-400">Metadata</dt>
               <dd class="mt-1 break-all font-medium text-gray-900 dark:text-white">
                 {{ certificate.metadataUri }}
@@ -73,6 +79,7 @@ import {
   type CertificateClaimStatus,
 } from '@/services/cryptoTradingApi'
 import { claimCertificateOnchain } from '@/services/solanaWallet'
+import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 
 const route = useRoute()
 const certificate = ref<CertificateClaimStatus | null>(null)
@@ -80,6 +87,7 @@ const loading = ref(true)
 const claiming = ref(false)
 const error = ref('')
 const contestId = computed(() => String(route.params.contestId || 'practice-arena'))
+const { walletAddress, connectWallet } = useSolanaWalletSession()
 
 onMounted(async () => {
   try {
@@ -95,6 +103,9 @@ async function claim() {
   if (claiming.value || !certificate.value?.eligible || certificate.value.mintTxSignature) return
   if (
     !certificate.value.walletAddress ||
+    !certificate.value.batchId ||
+    !certificate.value.topN ||
+    !certificate.value.batchAuthorized ||
     certificate.value.rank === null ||
     !certificate.value.metadataUri ||
     !certificate.value.snapshotHash
@@ -103,11 +114,25 @@ async function claim() {
     return
   }
 
+  const activeWallet = walletAddress.value
+    ? { walletAddress: walletAddress.value }
+    : await connectWallet()
+  if (!activeWallet?.walletAddress) {
+    error.value = 'Connect the wallet used to join this contest'
+    return
+  }
+  if (activeWallet.walletAddress !== certificate.value.walletAddress) {
+    error.value = 'Connect the wallet used to join this contest'
+    return
+  }
+
   claiming.value = true
   error.value = ''
   try {
     const onchainClaim = await claimCertificateOnchain({
       contestId: contestId.value,
+      batchId: certificate.value.batchId,
+      topN: certificate.value.topN,
       walletPublicKey: certificate.value.walletAddress,
       rank: certificate.value.rank,
       metadataUri: certificate.value.metadataUri,
@@ -116,6 +141,7 @@ async function claim() {
     })
     certificate.value = await confirmCertificateClaim({
       contestId: contestId.value,
+      batchId: certificate.value.batchId,
       mintTxSignature: onchainClaim.signature,
     })
   } catch (claimError) {

@@ -57,6 +57,9 @@ interface BackendContestWallet {
 interface BackendCertificateClaimStatus {
   contest_id: string
   eligible: boolean
+  batch_id: string | null
+  top_n: number | null
+  batch_authorized: boolean
   wallet_address: string | null
   rank: number | null
   recipient_name: string | null
@@ -72,6 +75,9 @@ interface BackendCertificateClaimStatus {
 export interface CertificateClaimStatus {
   contestId: string
   eligible: boolean
+  batchId: string | null
+  topN: number | null
+  batchAuthorized: boolean
   walletAddress: string | null
   rank: number | null
   recipientName: string | null
@@ -151,6 +157,7 @@ export async function fetchMyCertificate(
 
 export async function confirmCertificateClaim(input: {
   contestId: string
+  batchId: string
   mintAddress?: string | null
   mintTxSignature: string
 }): Promise<CertificateClaimStatus> {
@@ -159,6 +166,7 @@ export async function confirmCertificateClaim(input: {
     {
       method: 'POST',
       body: JSON.stringify({
+        batch_id: Number(input.batchId),
         mint_address: input.mintAddress ?? null,
         mint_tx_signature: input.mintTxSignature,
       }),
@@ -230,6 +238,9 @@ function mapCertificateStatus(
   return {
     contestId: status.contest_id,
     eligible: status.eligible,
+    batchId: status.batch_id,
+    topN: status.top_n,
+    batchAuthorized: status.batch_authorized,
     walletAddress: status.wallet_address,
     rank: status.rank,
     recipientName: status.recipient_name,

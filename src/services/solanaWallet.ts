@@ -44,6 +44,8 @@ export interface JoinContestOnchainResult {
 
 export interface ClaimCertificateOnchainInput {
   contestId: string
+  batchId?: string
+  topN?: number
   walletPublicKey: string
   rank: number
   metadataUri: string
