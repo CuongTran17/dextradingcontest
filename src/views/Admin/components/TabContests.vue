@@ -359,11 +359,12 @@ async function initializeOnchain(contestId: string) {
 }
 
 async function endAndExportContest(contest: Contest) {
-  if (!contest.onchainAdminWallet || !contest.onchainInitializeTxSignature) {
+  if (!contest.onchainAdminWallet || !contest.onchainContestAddress || !contest.onchainInitializeTxSignature) {
     error.value = 'Initialize this contest on Solana before ending it'
     return
   }
   const adminWallet = contest.onchainAdminWallet
+  const contestAddress = contest.onchainContestAddress
 
   endingContestId.value = contest.id
   error.value = ''
@@ -371,6 +372,7 @@ async function endAndExportContest(contest: Contest) {
     await runStep('Close Solana joins', () =>
       setContestJoinEnabledOnchain({
         contestId: contest.id,
+        contestAddress,
         enabled: false,
         expectedAdminWallet: adminWallet,
       }),
@@ -403,7 +405,7 @@ async function endAndExportContest(contest: Contest) {
 async function publishCertificateRoot() {
   if (!certificateExport.value) return
   const contest = contests.value.find((item) => item.id === certificateExport.value?.contest_id)
-  if (!contest?.onchainAdminWallet) {
+  if (!contest?.onchainAdminWallet || !contest.onchainContestAddress) {
     error.value = 'Initialize this contest on Solana before publishing certificate roots'
     return
   }
@@ -414,6 +416,7 @@ async function publishCertificateRoot() {
   try {
     const onchain = await publishCertificateRootOnchain({
       contestId: certificateExport.value.contest_id,
+      contestAddress: contest.onchainContestAddress,
       rootHex: certificateExport.value.merkle_root,
       snapshotHashHex: certificateExport.value.snapshot_hash,
       topN: certificateExport.value.top_n,

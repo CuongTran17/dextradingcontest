@@ -81,6 +81,7 @@ export interface InitializeContestOnchainResult {
 export interface SetContestJoinEnabledOnchainInput {
   contestId: string
   enabled: boolean
+  contestAddress?: string | null
   expectedAdminWallet?: string
 }
 
@@ -92,6 +93,7 @@ export interface SetContestJoinEnabledOnchainResult {
 
 export interface PublishCertificateRootOnchainInput {
   contestId: string
+  contestAddress?: string | null
   rootHex: string
   snapshotHashHex: string
   topN: number
@@ -206,10 +208,7 @@ export async function setContestJoinEnabledOnchain(
   }
 
   const programId = contestProgramId()
-  const contest = PublicKey.findProgramAddressSync(
-    [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
-    programId,
-  )[0]
+  const contest = contestAccountAddress(input.contestId, programId, input.contestAddress)
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
   const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
   if (!contestAccount) {
@@ -262,10 +261,7 @@ export async function publishCertificateRootOnchain(
   }
 
   const programId = contestProgramId()
-  const contest = PublicKey.findProgramAddressSync(
-    [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
-    programId,
-  )[0]
+  const contest = contestAccountAddress(input.contestId, programId, input.contestAddress)
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
   const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
   if (!contestAccount) {
@@ -565,6 +561,20 @@ function encodeClaimCertificateInstruction(input: {
     Buffer.from(input.snapshotHash),
     encodeAnchorVec32(input.proof),
   ])
+}
+
+function contestAccountAddress(
+  contestId: string,
+  programId: PublicKey,
+  storedAddress?: string | null,
+): PublicKey {
+  if (storedAddress) {
+    return new PublicKey(storedAddress)
+  }
+  return PublicKey.findProgramAddressSync(
+    [textEncoder.encode('contest'), textEncoder.encode(contestId)],
+    programId,
+  )[0]
 }
 
 function encodePublishCertificateRootInstruction(input: {

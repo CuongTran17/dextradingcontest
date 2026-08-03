@@ -208,10 +208,7 @@ describe('solanaWallet', () => {
     })
     vi.spyOn(Connection.prototype, 'sendRawTransaction').mockResolvedValue('5'.repeat(88))
     vi.spyOn(Transaction.prototype, 'serialize').mockReturnValue(Buffer.from([1, 2, 3]))
-    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
-      new PublicKey('11111111111111111111111111111111'),
-      255,
-    ])
+    const storedContestAddress = new PublicKey('SysvarRent111111111111111111111111111111111')
 
     const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
@@ -229,12 +226,13 @@ describe('solanaWallet', () => {
     await expect(
       setContestJoinEnabledOnchain({
         contestId: 'summer-cup',
+        contestAddress: storedContestAddress.toBase58(),
         enabled: false,
         expectedAdminWallet: admin.toBase58(),
       }),
     ).resolves.toEqual({
       adminWallet: admin.toBase58(),
-      contestAddress: '11111111111111111111111111111111',
+      contestAddress: storedContestAddress.toBase58(),
       signature: '5'.repeat(88),
     })
     expect(signAndSendTransaction).not.toHaveBeenCalled()
@@ -253,7 +251,7 @@ describe('solanaWallet', () => {
     expect([...instructionData.subarray(0, 8)]).toEqual([130, 14, 52, 92, 87, 2, 180, 137])
     expect([...instructionData.subarray(8, 9)]).toEqual([0])
     expect(instruction.keys).toEqual([
-      { pubkey: new PublicKey('11111111111111111111111111111111'), isSigner: false, isWritable: true },
+      { pubkey: storedContestAddress, isSigner: false, isWritable: true },
       { pubkey: admin, isSigner: true, isWritable: false },
     ])
   })
@@ -309,10 +307,7 @@ describe('solanaWallet', () => {
       context: { slot: 1 },
       value: { err: null },
     })
-    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
-      new PublicKey('11111111111111111111111111111111'),
-      255,
-    ])
+    const storedContestAddress = new PublicKey('SysvarRent111111111111111111111111111111111')
 
     const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
@@ -328,6 +323,7 @@ describe('solanaWallet', () => {
     await expect(
       publishCertificateRootOnchain({
         contestId: 'summer-cup',
+        contestAddress: storedContestAddress.toBase58(),
         rootHex: 'bb'.repeat(32),
         snapshotHashHex: 'aa'.repeat(32),
         topN: 5,
@@ -336,7 +332,7 @@ describe('solanaWallet', () => {
       }),
     ).resolves.toEqual({
       adminWallet: admin.toBase58(),
-      contestAddress: '11111111111111111111111111111111',
+      contestAddress: storedContestAddress.toBase58(),
       signature: '5'.repeat(88),
     })
 
@@ -356,7 +352,7 @@ describe('solanaWallet', () => {
     expect(instructionData.readUInt16LE(72)).toBe(5)
     expect(instructionData.includes(Buffer.from('91'))).toBe(true)
     expect(instruction.keys).toEqual([
-      { pubkey: new PublicKey('11111111111111111111111111111111'), isSigner: false, isWritable: true },
+      { pubkey: storedContestAddress, isSigner: false, isWritable: true },
       { pubkey: admin, isSigner: true, isWritable: false },
     ])
   })

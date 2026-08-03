@@ -147,6 +147,7 @@ describe('TabContests', () => {
     vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
       {
         ...contest,
+        onchainContestAddress: 'ContestPda1111111111111111111111111111111',
         onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
       },
     ])
@@ -203,6 +204,7 @@ describe('TabContests', () => {
 
     expect(publishCertificateRootOnchain).toHaveBeenCalledWith({
       contestId: 'summer-cup',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
       rootHex: 'bb'.repeat(32),
       snapshotHashHex: 'aa'.repeat(32),
       topN: 5,
@@ -253,6 +255,7 @@ describe('TabContests', () => {
       {
         ...contest,
         rawStatus: 'active',
+        onchainContestAddress: 'ContestPda1111111111111111111111111111111',
         onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
         onchainInitializeTxSignature: '5'.repeat(88),
       },
@@ -293,6 +296,7 @@ describe('TabContests', () => {
 
     expect(setContestJoinEnabledOnchain).toHaveBeenCalledWith({
       contestId: 'summer-cup',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
       enabled: false,
       expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
     })
@@ -332,6 +336,7 @@ describe('TabContests', () => {
       {
         ...contest,
         rawStatus: 'active',
+        onchainContestAddress: 'ContestPda1111111111111111111111111111111',
         onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
         onchainInitializeTxSignature: '5'.repeat(88),
       },
