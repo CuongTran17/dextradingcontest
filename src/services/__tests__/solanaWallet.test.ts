@@ -206,6 +206,8 @@ describe('solanaWallet', () => {
       context: { slot: 1 },
       value: { err: null },
     })
+    vi.spyOn(Connection.prototype, 'sendRawTransaction').mockResolvedValue('5'.repeat(88))
+    vi.spyOn(Transaction.prototype, 'serialize').mockReturnValue(Buffer.from([1, 2, 3]))
     vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
       new PublicKey('11111111111111111111111111111111'),
       255,
@@ -213,13 +215,15 @@ describe('solanaWallet', () => {
 
     const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
+    const signAndSendTransaction = vi.fn(async () => ({ signature: 'should-not-be-used' }))
     window.solana = {
       isPhantom: true,
       connect: async () => ({ publicKey: admin }),
-      signAndSendTransaction: async (transaction) => {
+      signTransaction: async (transaction) => {
         sentTransactions.push(transaction)
-        return { signature: '5'.repeat(88) }
+        return transaction
       },
+      signAndSendTransaction,
     }
 
     await expect(
@@ -233,6 +237,8 @@ describe('solanaWallet', () => {
       contestAddress: '11111111111111111111111111111111',
       signature: '5'.repeat(88),
     })
+    expect(signAndSendTransaction).not.toHaveBeenCalled()
+    expect(Connection.prototype.sendRawTransaction).toHaveBeenCalledWith(Buffer.from([1, 2, 3]))
 
     const transaction = sentTransactions[0] as {
       instructions: Array<{

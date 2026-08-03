@@ -232,7 +232,9 @@ export async function setContestJoinEnabledOnchain(
   transaction.feePayer = admin
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-  const { signature } = await signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(provider, connection, transaction, {
+    preferSeparateSignAndSend: true,
+  })
   return {
     adminWallet: admin.toBase58(),
     contestAddress: contest.toBase58(),
