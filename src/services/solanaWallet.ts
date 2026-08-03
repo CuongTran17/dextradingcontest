@@ -483,7 +483,9 @@ async function signAndConfirm(
   transaction: Transaction,
 ): Promise<{ signature: string }> {
   if (provider.signAndSendTransaction) {
-    const { signature } = await provider.signAndSendTransaction(transaction)
+    const { signature } = await provider.signAndSendTransaction(transaction).catch((error: unknown) => {
+      throw normalizeSolanaWalletError(error)
+    })
     await connection.confirmTransaction(signature, 'confirmed').catch(() => undefined)
     return { signature }
   }
@@ -491,10 +493,50 @@ async function signAndConfirm(
   if (!provider.signTransaction) {
     throw new Error('Connected wallet cannot sign Solana transactions')
   }
-  const signed = await provider.signTransaction(transaction)
-  const signature = await connection.sendRawTransaction(signed.serialize())
+  const signed = await provider.signTransaction(transaction).catch((error: unknown) => {
+    throw normalizeSolanaWalletError(error)
+  })
+  const signature = await connection.sendRawTransaction(signed.serialize()).catch((error: unknown) => {
+    throw normalizeSolanaWalletError(error)
+  })
   await connection.confirmTransaction(signature, 'confirmed').catch(() => undefined)
   return { signature }
+}
+
+function normalizeSolanaWalletError(error: unknown): Error {
+  const logs = extractSolanaLogs(error)
+  if (logs.length > 0) {
+    const message = formatSimulationError(logs, error)
+    if (message && message !== 'Unexpected error') return new Error(message)
+  }
+
+  if (error instanceof Error && error.message) {
+    return error
+  }
+  return new Error(String(error || 'Solana wallet transaction failed'))
+}
+
+function extractSolanaLogs(error: unknown): string[] {
+  const candidates: unknown[] = [error]
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    candidates.push(record.data, record.error)
+    if (record.data && typeof record.data === 'object') {
+      candidates.push((record.data as Record<string, unknown>).data)
+    }
+    if (record.error && typeof record.error === 'object') {
+      candidates.push((record.error as Record<string, unknown>).data)
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue
+    const logs = (candidate as Record<string, unknown>).logs
+    if (Array.isArray(logs)) {
+      return logs.filter((item): item is string => typeof item === 'string')
+    }
+  }
+  return []
 }
 
 function encodeClaimCertificateInstruction(input: {

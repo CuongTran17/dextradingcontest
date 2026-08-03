@@ -418,6 +418,56 @@ describe('solanaWallet', () => {
     expect(signAndSendTransaction).not.toHaveBeenCalled()
   })
 
+  it('surfaces wallet send logs when Phantom reports an unexpected error', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    const contest = new PublicKey('11111111111111111111111111111111')
+    const certificate = new PublicKey('SysvarRent111111111111111111111111111111111')
+    const tokenAccount = new PublicKey('So11111111111111111111111111111111111111112')
+    const metadata = new PublicKey('Vote111111111111111111111111111111111111111')
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: 'EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'simulateTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null, logs: [] },
+    } as never)
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([contest, 255])
+      .mockReturnValueOnce([certificate, 254])
+      .mockReturnValueOnce([tokenAccount, 253])
+      .mockReturnValueOnce([metadata, 252])
+    vi.spyOn(Transaction.prototype, 'partialSign').mockImplementation(() => undefined)
+
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: wallet }),
+      signAndSendTransaction: async () => {
+        const error = new Error('Unexpected error') as Error & { data?: { logs?: string[] } }
+        error.data = {
+          logs: [
+            'Program log: AnchorError occurred. Error Code: CertificateBatchMismatch. Error Number: 6006. Error Message: Certificate batch id does not match.',
+          ],
+        }
+        throw error
+      },
+    }
+
+    await expect(
+      claimCertificateOnchain({
+        contestId: 'practice-arena',
+        batchId: '91',
+        topN: 5,
+        walletPublicKey: wallet.toBase58(),
+        rank: 1,
+        metadataUri: 'ipfs://QmMetadata',
+        snapshotHash: 'aa'.repeat(32),
+        proof: [],
+      }),
+    ).rejects.toThrow('Certificate batch id does not match')
+  })
+
   it('builds and sends the claim certificate instruction', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     const contest = new PublicKey('11111111111111111111111111111111')
