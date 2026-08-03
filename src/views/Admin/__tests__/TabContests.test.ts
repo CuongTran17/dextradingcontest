@@ -267,7 +267,7 @@ describe('TabContests', () => {
     })
     vi.mocked(updateAdminCryptoContest).mockResolvedValue({
       ...contest,
-      rawStatus: 'active',
+      rawStatus: 'settling',
       endsAt: '2026-07-30T10:00:00.000Z',
     })
     vi.mocked(settleAdminCryptoContest).mockResolvedValue({
@@ -301,6 +301,7 @@ describe('TabContests', () => {
       expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
     })
     expect(updateAdminCryptoContest).toHaveBeenCalledWith('summer-cup', {
+      status: 'settling',
       endsAt: expect.any(String),
     })
     expect(settleAdminCryptoContest).toHaveBeenCalledWith('summer-cup')
@@ -348,7 +349,7 @@ describe('TabContests', () => {
     })
     vi.mocked(updateAdminCryptoContest).mockResolvedValue({
       ...contest,
-      rawStatus: 'active',
+      rawStatus: 'settling',
       endsAt: '2026-07-30T10:00:00.000Z',
     })
     vi.mocked(settleAdminCryptoContest).mockResolvedValue({

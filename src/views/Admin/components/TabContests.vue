@@ -378,7 +378,9 @@ async function endAndExportContest(contest: Contest) {
       }),
     )
     const endedAt = new Date().toISOString()
-    await runStep('Update contest end time', () => updateAdminCryptoContest(contest.id, { endsAt: endedAt }))
+    await runStep('Mark contest settling', () =>
+      updateAdminCryptoContest(contest.id, { status: 'settling', endsAt: endedAt }),
+    )
     await runStep('Settle contest', () => settleAdminCryptoContest(contest.id))
     certificateExport.value = await runStep('Export certificates', () =>
       exportContestCertificates(contest.id, {
