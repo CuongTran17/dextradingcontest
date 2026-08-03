@@ -11,6 +11,8 @@ import { Buffer } from 'buffer'
 
 const DEFAULT_SOLANA_RPC_URL = 'https://api.devnet.solana.com'
 const MIN_JOIN_BALANCE_LAMPORTS = 5_000_000
+const MAX_CONTEST_ID_LEN = 32
+const MAX_BATCH_ID_LEN = 32
 const INITIALIZE_CONTEST_DISCRIMINATOR = Uint8Array.from([8, 124, 233, 229, 42, 156, 92, 3])
 const JOIN_CONTEST_DISCRIMINATOR = Uint8Array.from([247, 243, 77, 111, 247, 254, 100, 133])
 const SET_JOIN_ENABLED_DISCRIMINATOR = Uint8Array.from([130, 14, 52, 92, 87, 2, 180, 137])
@@ -208,8 +210,13 @@ export async function setContestJoinEnabledOnchain(
   }
 
   const programId = contestProgramId()
-  const contest = contestAccountAddress(input.contestId, programId, input.contestAddress)
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const contest = await resolveContestAccountAddress(
+    connection,
+    input.contestId,
+    programId,
+    input.contestAddress,
+  )
   const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
   if (!contestAccount) {
     throw new Error(`Contest ${input.contestId} is not initialized on Solana devnet`)
@@ -261,8 +268,13 @@ export async function publishCertificateRootOnchain(
   }
 
   const programId = contestProgramId()
-  const contest = contestAccountAddress(input.contestId, programId, input.contestAddress)
   const connection = new Connection(solanaRpcUrl(), 'confirmed')
+  const contest = await resolveContestAccountAddress(
+    connection,
+    input.contestId,
+    programId,
+    input.contestAddress,
+  )
   const contestAccount = await connection.getAccountInfo(contest, 'confirmed')
   if (!contestAccount) {
     throw new Error(`Contest ${input.contestId} is not initialized on Solana devnet`)
@@ -575,6 +587,65 @@ function contestAccountAddress(
     [textEncoder.encode('contest'), textEncoder.encode(contestId)],
     programId,
   )[0]
+}
+
+async function resolveContestAccountAddress(
+  connection: Connection,
+  contestId: string,
+  programId: PublicKey,
+  storedAddress?: string | null,
+): Promise<PublicKey> {
+  const contest = contestAccountAddress(contestId, programId, storedAddress)
+  if (!storedAddress) return contest
+
+  const account = await connection.getAccountInfo(contest, 'confirmed')
+  if (!account) {
+    throw new Error(`Stored Solana contest address ${contest.toBase58()} is not initialized on devnet`)
+  }
+  if (!account.owner.equals(programId)) {
+    throw new Error(`Stored Solana contest address ${contest.toBase58()} is not owned by the contest program`)
+  }
+
+  const decoded = decodeContestAccountState(Buffer.from(account.data))
+  if (!decoded) {
+    throw new Error(`Stored Solana contest address ${contest.toBase58()} is not a contest account`)
+  }
+  if (decoded.contestId !== contestId) {
+    throw new Error(
+      `Stored Solana contest address belongs to on-chain contest ${decoded.contestId}, but this contest is ${contestId}`,
+    )
+  }
+
+  const expectedContest = contestAccountAddress(decoded.contestId, programId)
+  if (!expectedContest.equals(contest)) {
+    throw new Error(
+      `Stored Solana contest address ${contest.toBase58()} does not match the PDA for on-chain contest ${decoded.contestId}`,
+    )
+  }
+  return contest
+}
+
+function decodeContestAccountState(data: Buffer): { contestId: string; bump: number } | null {
+  let offset = 8
+  if (data.length < offset + 32 + 4) return null
+
+  offset += 32
+  const contestIdLength = data.readUInt32LE(offset)
+  offset += 4
+  if (contestIdLength > MAX_CONTEST_ID_LEN || data.length < offset + contestIdLength) return null
+  const contestId = data.subarray(offset, offset + contestIdLength).toString('utf8')
+  offset += contestIdLength
+
+  offset += 1 + 32 + 32 + 2
+  if (data.length < offset + 4) return null
+  const batchIdLength = data.readUInt32LE(offset)
+  offset += 4 + batchIdLength
+  if (batchIdLength > MAX_BATCH_ID_LEN || data.length < offset + 1) return null
+
+  return {
+    contestId,
+    bump: data[offset],
+  }
 }
 
 function encodePublishCertificateRootInstruction(input: {

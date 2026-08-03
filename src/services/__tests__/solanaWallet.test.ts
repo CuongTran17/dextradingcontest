@@ -10,6 +10,40 @@ import {
   setContestJoinEnabledOnchain,
 } from '@/services/solanaWallet'
 
+const PROGRAM_ID = new PublicKey('9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+const ADMIN_WALLET = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+const SUMMER_CONTEST_ADDRESS = new PublicKey('11111111111111111111111111111111')
+const OTHER_CONTEST_ADDRESS = new PublicKey('SysvarRent111111111111111111111111111111111')
+
+function contestPda(contestId: string): PublicKey {
+  return contestId === 'other-cup' ? OTHER_CONTEST_ADDRESS : SUMMER_CONTEST_ADDRESS
+}
+
+function contestAccountInfo(contestId: string, admin = ADMIN_WALLET) {
+  const contestIdBytes = Buffer.from(contestId)
+  const contestIdLength = Buffer.alloc(4)
+  contestIdLength.writeUInt32LE(contestIdBytes.length, 0)
+  const batchIdLength = Buffer.alloc(4)
+  batchIdLength.writeUInt32LE(0, 0)
+  const topN = Buffer.alloc(2)
+
+  return {
+    owner: PROGRAM_ID,
+    data: Buffer.concat([
+      Buffer.alloc(8),
+      admin.toBuffer(),
+      contestIdLength,
+      contestIdBytes,
+      Buffer.from([1]),
+      Buffer.alloc(32),
+      Buffer.alloc(32),
+      topN,
+      batchIdLength,
+      Buffer.from([255]),
+    ]),
+  } as never
+}
+
 describe('solanaWallet', () => {
   afterEach(() => {
     delete window.solana
@@ -196,8 +230,8 @@ describe('solanaWallet', () => {
   it('builds and sends the admin set join enabled instruction', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue({
-      data: Buffer.alloc(0),
-    } as never)
+      ...contestAccountInfo('summer-cup'),
+    })
     vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
       blockhash: '11111111111111111111111111111111',
       lastValidBlockHeight: 1,
@@ -208,7 +242,8 @@ describe('solanaWallet', () => {
     })
     vi.spyOn(Connection.prototype, 'sendRawTransaction').mockResolvedValue('5'.repeat(88))
     vi.spyOn(Transaction.prototype, 'serialize').mockReturnValue(Buffer.from([1, 2, 3]))
-    const storedContestAddress = new PublicKey('SysvarRent111111111111111111111111111111111')
+    const storedContestAddress = contestPda('summer-cup')
+    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValue([storedContestAddress, 255])
 
     const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
@@ -256,6 +291,32 @@ describe('solanaWallet', () => {
     ])
   })
 
+  it('rejects set join enabled before signing when the stored contest address belongs to another contest', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue({
+      ...contestAccountInfo('other-cup'),
+    })
+
+    const signTransaction = vi.fn()
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: ADMIN_WALLET }),
+      signTransaction,
+    }
+
+    await expect(
+      setContestJoinEnabledOnchain({
+        contestId: 'summer-cup',
+        contestAddress: contestPda('other-cup').toBase58(),
+        enabled: false,
+        expectedAdminWallet: ADMIN_WALLET.toBase58(),
+      }),
+    ).rejects.toThrow(
+      'Stored Solana contest address belongs to on-chain contest other-cup, but this contest is summer-cup',
+    )
+    expect(signTransaction).not.toHaveBeenCalled()
+  })
+
   it('does not sign set join enabled when connected wallet is not the contest admin wallet', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValueOnce([
@@ -297,8 +358,8 @@ describe('solanaWallet', () => {
   it('builds and sends the publish certificate root instruction', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     vi.spyOn(Connection.prototype, 'getAccountInfo').mockResolvedValue({
-      data: Buffer.alloc(0),
-    } as never)
+      ...contestAccountInfo('summer-cup'),
+    })
     vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
       blockhash: '11111111111111111111111111111111',
       lastValidBlockHeight: 1,
@@ -307,7 +368,8 @@ describe('solanaWallet', () => {
       context: { slot: 1 },
       value: { err: null },
     })
-    const storedContestAddress = new PublicKey('SysvarRent111111111111111111111111111111111')
+    const storedContestAddress = contestPda('summer-cup')
+    vi.spyOn(PublicKey, 'findProgramAddressSync').mockReturnValue([storedContestAddress, 255])
 
     const admin = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
