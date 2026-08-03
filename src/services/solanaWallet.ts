@@ -448,8 +448,33 @@ export async function claimCertificateOnchain(
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
   transaction.partialSign(mint)
 
+  await assertTransactionSimulation(connection, transaction)
   const { signature } = await signAndConfirm(provider, connection, transaction)
   return { signature, mintAddress: mint.publicKey.toBase58() }
+}
+
+async function assertTransactionSimulation(
+  connection: Connection,
+  transaction: Transaction,
+): Promise<void> {
+  const simulation = await connection.simulateTransaction(transaction, undefined, false)
+  if (simulation.value.err) {
+    throw new Error(formatSimulationError(simulation.value.logs ?? [], simulation.value.err))
+  }
+}
+
+function formatSimulationError(logs: string[], err: unknown): string {
+  const anchorError = logs
+    .map((line) => line.match(/Error Message:\s*(.+?)(?:\.)?$/)?.[1])
+    .find(Boolean)
+  if (anchorError) return anchorError
+
+  const usefulLog = [...logs]
+    .reverse()
+    .find((line) => /insufficient|error|failed|custom program error/i.test(line))
+  if (usefulLog) return usefulLog.replace(/^Program log:\s*/, '')
+
+  return `Solana preflight failed: ${JSON.stringify(err)}`
 }
 
 async function signAndConfirm(

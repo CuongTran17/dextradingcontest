@@ -370,6 +370,54 @@ describe('solanaWallet', () => {
     ).rejects.toThrow('Snapshot hash must be 32 bytes')
   })
 
+  it('surfaces certificate claim simulation logs before asking the wallet to send', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: 'EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'simulateTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: {
+        err: { InstructionError: [0, { Custom: 6010 }] },
+        logs: [
+          'Program 9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx invoke [1]',
+          'Program log: AnchorError occurred. Error Code: InvalidMerkleProof. Error Number: 6010. Error Message: Certificate Merkle proof is invalid.',
+        ],
+      },
+    } as never)
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
+      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+      .mockReturnValueOnce([new PublicKey('So11111111111111111111111111111111111111112'), 253])
+      .mockReturnValueOnce([new PublicKey('Vote111111111111111111111111111111111111111'), 252])
+    vi.spyOn(Transaction.prototype, 'partialSign').mockImplementation(() => undefined)
+
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    const signAndSendTransaction = vi.fn(async () => {
+      throw new Error('wallet send should not be called after failed preflight')
+    })
+    window.solana = {
+      isPhantom: true,
+      connect: async () => ({ publicKey: wallet }),
+      signAndSendTransaction,
+    }
+
+    await expect(
+      claimCertificateOnchain({
+        contestId: 'practice-arena',
+        batchId: '91',
+        topN: 5,
+        walletPublicKey: wallet.toBase58(),
+        rank: 1,
+        metadataUri: 'ipfs://QmMetadata',
+        snapshotHash: 'aa'.repeat(32),
+        proof: [],
+      }),
+    ).rejects.toThrow('Certificate Merkle proof is invalid')
+    expect(signAndSendTransaction).not.toHaveBeenCalled()
+  })
+
   it('builds and sends the claim certificate instruction', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     const contest = new PublicKey('11111111111111111111111111111111')
@@ -384,6 +432,10 @@ describe('solanaWallet', () => {
       context: { slot: 1 },
       value: { err: null },
     })
+    vi.spyOn(Connection.prototype, 'simulateTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null, logs: [] },
+    } as never)
     const partialSign = vi
       .spyOn(Transaction.prototype, 'partialSign')
       .mockImplementation(() => undefined)
