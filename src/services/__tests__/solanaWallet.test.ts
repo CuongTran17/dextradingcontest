@@ -418,7 +418,7 @@ describe('solanaWallet', () => {
     expect(signAndSendTransaction).not.toHaveBeenCalled()
   })
 
-  it('surfaces wallet send logs when Phantom reports an unexpected error', async () => {
+  it('surfaces RPC send logs after the wallet signs a certificate claim', async () => {
     vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
     const contest = new PublicKey('11111111111111111111111111111111')
     const certificate = new PublicKey('SysvarRent111111111111111111111111111111111')
@@ -438,20 +438,22 @@ describe('solanaWallet', () => {
       .mockReturnValueOnce([tokenAccount, 253])
       .mockReturnValueOnce([metadata, 252])
     vi.spyOn(Transaction.prototype, 'partialSign').mockImplementation(() => undefined)
+    vi.spyOn(Transaction.prototype, 'serialize').mockReturnValue(Buffer.from([1, 2, 3]))
+    vi.spyOn(Connection.prototype, 'sendRawTransaction').mockRejectedValue(
+      Object.assign(new Error('Unexpected error'), {
+        data: {
+          logs: [
+            'Program log: AnchorError occurred. Error Code: CertificateBatchMismatch. Error Number: 6006. Error Message: Certificate batch id does not match.',
+          ],
+        },
+      }),
+    )
 
     const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     window.solana = {
       isPhantom: true,
       connect: async () => ({ publicKey: wallet }),
-      signAndSendTransaction: async () => {
-        const error = new Error('Unexpected error') as Error & { data?: { logs?: string[] } }
-        error.data = {
-          logs: [
-            'Program log: AnchorError occurred. Error Code: CertificateBatchMismatch. Error Number: 6006. Error Message: Certificate batch id does not match.',
-          ],
-        }
-        throw error
-      },
+      signTransaction: async (transaction) => transaction,
     }
 
     await expect(
@@ -486,9 +488,11 @@ describe('solanaWallet', () => {
       context: { slot: 1 },
       value: { err: null, logs: [] },
     } as never)
+    vi.spyOn(Connection.prototype, 'sendRawTransaction').mockResolvedValue('5'.repeat(88))
     const partialSign = vi
       .spyOn(Transaction.prototype, 'partialSign')
       .mockImplementation(() => undefined)
+    vi.spyOn(Transaction.prototype, 'serialize').mockReturnValue(Buffer.from([1, 2, 3]))
     vi.spyOn(PublicKey, 'findProgramAddressSync')
       .mockReturnValueOnce([contest, 255])
       .mockReturnValueOnce([certificate, 254])
@@ -497,13 +501,15 @@ describe('solanaWallet', () => {
 
     const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
     const sentTransactions: unknown[] = []
+    const signAndSendTransaction = vi.fn(async () => ({ signature: 'should-not-be-used' }))
     window.solana = {
       isPhantom: true,
       connect: async () => ({ publicKey: wallet }),
-      signAndSendTransaction: async (transaction) => {
+      signTransaction: async (transaction) => {
         sentTransactions.push(transaction)
-        return { signature: '5'.repeat(88) }
+        return transaction
       },
+      signAndSendTransaction,
     }
 
     const result = await claimCertificateOnchain({
@@ -519,6 +525,8 @@ describe('solanaWallet', () => {
     expect(result.signature).toBe('5'.repeat(88))
     expect(result.mintAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)
     expect(partialSign).toHaveBeenCalledOnce()
+    expect(signAndSendTransaction).not.toHaveBeenCalled()
+    expect(Connection.prototype.sendRawTransaction).toHaveBeenCalledWith(Buffer.from([1, 2, 3]))
 
     const transaction = sentTransactions[0] as {
       instructions: Array<{

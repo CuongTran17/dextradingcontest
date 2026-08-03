@@ -449,7 +449,9 @@ export async function claimCertificateOnchain(
   transaction.partialSign(mint)
 
   await assertTransactionSimulation(connection, transaction)
-  const { signature } = await signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(provider, connection, transaction, {
+    preferSeparateSignAndSend: true,
+  })
   return { signature, mintAddress: mint.publicKey.toBase58() }
 }
 
@@ -481,8 +483,9 @@ async function signAndConfirm(
   provider: SolanaWalletProvider,
   connection: Connection,
   transaction: Transaction,
+  options: { preferSeparateSignAndSend?: boolean } = {},
 ): Promise<{ signature: string }> {
-  if (provider.signAndSendTransaction) {
+  if (provider.signAndSendTransaction && !options.preferSeparateSignAndSend) {
     const { signature } = await provider.signAndSendTransaction(transaction).catch((error: unknown) => {
       throw normalizeSolanaWalletError(error)
     })
