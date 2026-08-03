@@ -37,3 +37,16 @@ def test_upload_bytes_returns_ipfs_uri():
     assert uri == "ipfs://QmHash"
     assert http.requests[0]["files"]["file"][0] == "certificate.png"
     assert http.requests[0]["files"]["file"][2] == "image/png"
+
+
+def test_upload_json_returns_gateway_uri_when_configured():
+    http = FakeHttpClient()
+    client = PinataClient(
+        jwt="test",
+        http_client=http,
+        gateway_url="https://gateway.pinata.cloud/ipfs/",
+    )
+
+    uri = client.upload_json("metadata.json", {"name": "Certificate"})
+
+    assert uri == "https://gateway.pinata.cloud/ipfs/QmHash"

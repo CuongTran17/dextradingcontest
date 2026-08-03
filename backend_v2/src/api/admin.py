@@ -68,7 +68,10 @@ def get_certificate_export_service(
         raise HTTPException(status_code=501, detail="Pinata JWT is not configured")
     return CertificateExportService(
         CryptoTradingRepository(db),
-        pinata_client=PinataClient(settings.pinata_jwt),
+        pinata_client=PinataClient(
+            settings.pinata_jwt,
+            gateway_url=settings.pinata_gateway_url,
+        ),
         renderer=CertificateImageRenderer(),
     )
 

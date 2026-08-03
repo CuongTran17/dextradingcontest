@@ -20,11 +20,12 @@ class HttpxPinataTransport:
 class PinataClient:
     base_url = "https://api.pinata.cloud"
 
-    def __init__(self, jwt: str, http_client=None):
+    def __init__(self, jwt: str, http_client=None, gateway_url: str | None = None):
         if not jwt:
             raise PinataClientError("Pinata JWT is required")
         self.jwt = jwt
         self.http_client = http_client or HttpxPinataTransport()
+        self.gateway_url = gateway_url.rstrip("/") if gateway_url else None
 
     def upload_bytes(self, filename: str, content: bytes, content_type: str) -> str:
         response = self.http_client.post(
@@ -34,7 +35,7 @@ class PinataClient:
                 "file": (filename, content, content_type),
             },
         )
-        return self._ipfs_uri(response)
+        return self._asset_uri(response)
 
     def upload_json(self, filename: str, payload: dict) -> str:
         response = self.http_client.post(
@@ -45,14 +46,15 @@ class PinataClient:
                 "pinataContent": payload,
             },
         )
-        return self._ipfs_uri(response)
+        return self._asset_uri(response)
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.jwt}"}
 
-    @staticmethod
-    def _ipfs_uri(response: dict[str, Any]) -> str:
+    def _asset_uri(self, response: dict[str, Any]) -> str:
         ipfs_hash = response.get("IpfsHash")
         if not ipfs_hash:
             raise PinataClientError("Pinata response did not include IpfsHash")
+        if self.gateway_url:
+            return f"{self.gateway_url}/{ipfs_hash}"
         return f"ipfs://{ipfs_hash}"
