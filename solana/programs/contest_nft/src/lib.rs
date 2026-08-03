@@ -138,7 +138,7 @@ pub mod contest_nft {
         let signer_seeds: &[&[&[u8]]] = &[&[
             b"contest",
             ctx.accounts.contest.contest_id.as_bytes(),
-            &[ctx.accounts.contest.bump],
+            &[ctx.bumps.contest],
         ]];
 
         mint_to(
@@ -218,7 +218,7 @@ pub struct SetJoinEnabled<'info> {
     #[account(
         mut,
         seeds = [b"contest", contest.contest_id.as_bytes()],
-        bump = contest.bump,
+        bump,
         has_one = admin
     )]
     pub contest: Account<'info, ContestState>,
@@ -229,7 +229,7 @@ pub struct SetJoinEnabled<'info> {
 pub struct JoinContest<'info> {
     #[account(
         seeds = [b"contest", contest.contest_id.as_bytes()],
-        bump = contest.bump
+        bump
     )]
     pub contest: Account<'info, ContestState>,
     #[account(
@@ -250,7 +250,7 @@ pub struct PublishCertificateRoot<'info> {
     #[account(
         mut,
         seeds = [b"contest", contest.contest_id.as_bytes()],
-        bump = contest.bump,
+        bump,
         has_one = admin
     )]
     pub contest: Account<'info, ContestState>,
@@ -261,7 +261,7 @@ pub struct PublishCertificateRoot<'info> {
 pub struct ClaimCertificate<'info> {
     #[account(
         seeds = [b"contest", contest.contest_id.as_bytes()],
-        bump = contest.bump
+        bump
     )]
     pub contest: Account<'info, ContestState>,
     #[account(
