@@ -326,4 +326,43 @@ describe('TabContests', () => {
     expect(exportContestCertificates).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Initialize this contest on Solana before ending it')
   })
+
+  it('labels the failing step when end and export fails', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        rawStatus: 'active',
+        onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+        onchainInitializeTxSignature: '5'.repeat(88),
+      },
+    ])
+    vi.mocked(setContestJoinEnabledOnchain).mockResolvedValue({
+      adminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      contestAddress: 'ContestPda1111111111111111111111111111111',
+      signature: '4'.repeat(88),
+    })
+    vi.mocked(updateAdminCryptoContest).mockResolvedValue({
+      ...contest,
+      rawStatus: 'active',
+      endsAt: '2026-07-30T10:00:00.000Z',
+    })
+    vi.mocked(settleAdminCryptoContest).mockResolvedValue({
+      status: 'completed',
+      contest_id: 'summer-cup',
+      version: 1,
+      snapshot_hash: 'aa'.repeat(32),
+      settlement_prices: {},
+      rows: [],
+      cancelled_orders: [],
+      settled_at: '2026-07-30T10:00:00+00:00',
+    })
+    vi.mocked(exportContestCertificates).mockRejectedValue(new Error('Database error'))
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="end-export-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Export certificates failed: Database error')
+  })
 })

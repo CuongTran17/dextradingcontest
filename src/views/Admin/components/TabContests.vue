@@ -310,7 +310,7 @@ async function saveContest() {
     contests.value = [created, ...contests.value]
     resetForm()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unable to save contest'
+    error.value = stepError(editingContestId.value ? 'Update contest' : 'Create contest', err)
   }
 }
 
@@ -333,7 +333,7 @@ async function exportCertificates(contestId: string) {
       topN: certificateTopN(contestId),
     })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unable to export certificates'
+    error.value = stepError('Export certificates', err)
   } finally {
     exportingContestId.value = ''
   }
@@ -363,21 +363,26 @@ async function endAndExportContest(contest: Contest) {
     error.value = 'Initialize this contest on Solana before ending it'
     return
   }
+  const adminWallet = contest.onchainAdminWallet
 
   endingContestId.value = contest.id
   error.value = ''
   try {
-    await setContestJoinEnabledOnchain({
-      contestId: contest.id,
-      enabled: false,
-      expectedAdminWallet: contest.onchainAdminWallet,
-    })
+    await runStep('Close Solana joins', () =>
+      setContestJoinEnabledOnchain({
+        contestId: contest.id,
+        enabled: false,
+        expectedAdminWallet: adminWallet,
+      }),
+    )
     const endedAt = new Date().toISOString()
-    await updateAdminCryptoContest(contest.id, { endsAt: endedAt })
-    await settleAdminCryptoContest(contest.id)
-    certificateExport.value = await exportContestCertificates(contest.id, {
-      topN: certificateTopN(contest.id),
-    })
+    await runStep('Update contest end time', () => updateAdminCryptoContest(contest.id, { endsAt: endedAt }))
+    await runStep('Settle contest', () => settleAdminCryptoContest(contest.id))
+    certificateExport.value = await runStep('Export certificates', () =>
+      exportContestCertificates(contest.id, {
+        topN: certificateTopN(contest.id),
+      }),
+    )
     contests.value = contests.value.map((item) =>
       item.id === contest.id
         ? {
@@ -439,6 +444,19 @@ function editContest(contest: Contest) {
   form.value.symbolsText = contest.symbols.join(',')
   form.value.startsAt = toDateTimeLocal(contest.startsAt)
   form.value.endsAt = toDateTimeLocal(contest.endsAt)
+}
+
+async function runStep<T>(label: string, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action()
+  } catch (err) {
+    throw new Error(stepError(label, err))
+  }
+}
+
+function stepError(label: string, err: unknown): string {
+  const message = err instanceof Error && err.message ? err.message : 'Unexpected error'
+  return `${label} failed: ${message}`
 }
 
 function resetForm() {
