@@ -171,7 +171,7 @@ async function joinContest() {
         contestId: contest.value.id,
         walletPublicKey: connectedWallet.value || undefined,
       },
-      signer,
+      signer ?? undefined,
     )
     storePendingSolanaJoin(contest.value.id, onchainJoin)
     await confirmSolanaJoin({

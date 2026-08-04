@@ -37,15 +37,17 @@ vi.mock('@/services/solanaWallet', () => ({
   setContestJoinEnabledOnchain: vi.fn(),
 }))
 
+const activeSigner = {
+  publicKey: new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB'),
+  walletName: 'Phantom',
+  signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
+}
+
 const walletSession = {
   walletAddress: { value: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB' },
   walletName: { value: 'Phantom' },
   activeSigner: {
-    value: {
-      publicKey: new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB'),
-      walletName: 'Phantom',
-      signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
-    },
+    value: activeSigner as typeof activeSigner | null,
   },
   connectWallet: vi.fn(),
 }
@@ -69,6 +71,7 @@ const contest: Contest = {
 
 describe('TabContests', () => {
   beforeEach(() => {
+    walletSession.activeSigner.value = activeSigner
     vi.mocked(fetchAdminCryptoContests).mockReset()
     vi.mocked(createAdminCryptoContest).mockReset()
     vi.mocked(confirmCertificateBatchAuthorization).mockReset()
@@ -276,6 +279,19 @@ describe('TabContests', () => {
     expect(wrapper.text()).toContain('ExUB...J2NB')
   })
 
+  it('requires an active signer before initializing a contest on Solana', async () => {
+    walletSession.activeSigner.value = null
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="initialize-onchain-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(initializeContestOnchain).not.toHaveBeenCalled()
+    expect(confirmContestOnchainInitialize).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Connect the admin wallet before signing this Solana transaction')
+  })
+
   it('locks joins on-chain, ends early, settles, and exports certificates', async () => {
     vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
       {
@@ -359,6 +375,60 @@ describe('TabContests', () => {
     expect(settleAdminCryptoContest).not.toHaveBeenCalled()
     expect(exportContestCertificates).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Initialize this contest on Solana before ending it')
+  })
+
+  it('requires an active signer before ending and exporting a contest', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        rawStatus: 'active',
+        onchainContestAddress: 'ContestPda1111111111111111111111111111111',
+        onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+        onchainInitializeTxSignature: '5'.repeat(88),
+      },
+    ])
+    walletSession.activeSigner.value = null
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="end-export-summer-cup"]').trigger('click')
+    await flushPromises()
+
+    expect(setContestJoinEnabledOnchain).not.toHaveBeenCalled()
+    expect(updateAdminCryptoContest).not.toHaveBeenCalled()
+    expect(settleAdminCryptoContest).not.toHaveBeenCalled()
+    expect(exportContestCertificates).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Connect the admin wallet before signing this Solana transaction')
+  })
+
+  it('requires an active signer before publishing a certificate root', async () => {
+    vi.mocked(fetchAdminCryptoContests).mockResolvedValue([
+      {
+        ...contest,
+        onchainContestAddress: 'ContestPda1111111111111111111111111111111',
+        onchainAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      },
+    ])
+    vi.mocked(exportContestCertificates).mockResolvedValue({
+      batch_id: '91',
+      contest_id: 'summer-cup',
+      top_n: 10,
+      snapshot_hash: 'aa'.repeat(32),
+      merkle_root: 'bb'.repeat(32),
+      claims: [],
+    })
+
+    const wrapper = mount(TabContests)
+    await flushPromises()
+    await wrapper.get('[data-test="export-certificates-summer-cup"]').trigger('click')
+    await flushPromises()
+    walletSession.activeSigner.value = null
+    await wrapper.get('[data-test="publish-certificate-root"]').trigger('click')
+    await flushPromises()
+
+    expect(publishCertificateRootOnchain).not.toHaveBeenCalled()
+    expect(confirmCertificateBatchAuthorization).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Connect the admin wallet before signing this Solana transaction')
   })
 
   it('labels the failing step when end and export fails', async () => {
