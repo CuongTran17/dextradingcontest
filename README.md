@@ -126,6 +126,11 @@ VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
 VITE_SOLANA_CONTEST_PROGRAM_ID=9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx
 ```
 
+The frontend wallet connection uses the Vue Solana wallet adapter stack. The
+initial selector supports installed Solana browser wallets such as Phantom and
+Solflare on devnet. WalletConnect/Reown AppKit is intentionally not part of this
+phase.
+
 ### 3. MySQL database
 
 ```sql
