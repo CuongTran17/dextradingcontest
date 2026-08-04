@@ -44,6 +44,7 @@
 <script setup lang="ts">
 import { XIcon } from '@/icons'
 import type { SolanaWalletOption } from '@/composables/useSolanaWalletSession'
+import type { WalletName } from '@solana/wallet-adapter-base'
 
 defineProps<{
   walletOptions: SolanaWalletOption[]
@@ -52,6 +53,6 @@ defineProps<{
 
 defineEmits<{
   close: []
-  select: [walletName: string]
+  select: [walletName: WalletName]
 }>()
 </script>

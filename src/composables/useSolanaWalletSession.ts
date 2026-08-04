@@ -19,7 +19,7 @@ const connecting = ref(false)
 const error = ref('')
 
 export interface SolanaWalletOption {
-  name: string
+  name: WalletName
   readyState: WalletReadyState
   readyStateLabel: string
 }
@@ -74,7 +74,7 @@ export function useSolanaWalletSession() {
 
   const walletOptions = computed<SolanaWalletOption[]>(() =>
     walletStore.wallets.map((wallet) => ({
-      name: String(wallet.adapter.name),
+      name: wallet.adapter.name,
       readyState: wallet.adapter.readyState,
       readyStateLabel: walletReadyStateLabel(wallet.adapter.readyState),
     })),

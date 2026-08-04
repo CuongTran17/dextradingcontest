@@ -52,7 +52,7 @@
         :wallet-options="walletOptions"
         :connecting="connecting"
         @close="closeWalletSelector"
-        @select="(walletName) => connectWallet(walletName as never)"
+        @select="connectWallet"
       />
       <p v-if="error" class="mt-2 text-xs text-rose-600">{{ error }}</p>
     </div>
@@ -74,7 +74,7 @@
         :wallet-options="walletOptions"
         :connecting="connecting"
         @close="closeWalletSelector"
-        @select="(walletName) => connectWallet(walletName as never)"
+        @select="connectWallet"
       />
     </div>
     <button
