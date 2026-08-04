@@ -1,19 +1,34 @@
-import { ref } from 'vue'
+import { WalletReadyState, type WalletName } from '@solana/wallet-adapter-base'
+import { Connection } from '@solana/web3.js'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useWallet } from '@solana/wallet-adapter-vue'
 
 import { isLoggedIn } from '@/services/authApi'
 import {
-  connectSolanaWallet,
-  disconnectSolanaWallet,
-  type ConnectSolanaWalletResult,
+  SOLANA_WALLET_ADAPTER_STORAGE_KEY,
+  walletReadyStateLabel,
+} from '@/services/solanaWalletAdapters'
+import { solanaRpcUrl } from '@/services/solanaWallet'
+import type {
+  ConnectSolanaWalletResult,
+  SolanaWalletSigner,
 } from '@/services/solanaWallet'
 
 const STORAGE_KEY = 'crypto_contest_solana_wallet'
 
 const walletAddress = ref('')
 const walletName = ref('Solana wallet')
+const displayWalletAddress = ref('')
+const displayWalletName = ref('Solana wallet')
 const connecting = ref(false)
 const error = ref('')
 const lastDisconnectedWalletAddress = ref('')
+
+export interface SolanaWalletOption {
+  name: WalletName
+  readyState: WalletReadyState
+  readyStateLabel: string
+}
 
 function hydrateSolanaWalletSession(): void {
   if (!isLoggedIn()) {
@@ -29,8 +44,10 @@ function hydrateSolanaWalletSession(): void {
     }
 
     const saved = JSON.parse(raw) as Partial<ConnectSolanaWalletResult>
-    walletAddress.value = saved.walletAddress || ''
-    walletName.value = saved.walletName || 'Solana wallet'
+    walletAddress.value = ''
+    walletName.value = 'Solana wallet'
+    displayWalletAddress.value = saved.walletAddress || ''
+    displayWalletName.value = saved.walletName || 'Solana wallet'
   } catch {
     clearSolanaWalletSession()
   }
@@ -39,6 +56,8 @@ function hydrateSolanaWalletSession(): void {
 function saveSolanaWalletSession(wallet: ConnectSolanaWalletResult): void {
   walletAddress.value = wallet.walletAddress
   walletName.value = wallet.walletName
+  displayWalletAddress.value = wallet.walletAddress
+  displayWalletName.value = wallet.walletName
   lastDisconnectedWalletAddress.value = ''
   localStorage.setItem(STORAGE_KEY, JSON.stringify(wallet))
 }
@@ -46,15 +65,108 @@ function saveSolanaWalletSession(wallet: ConnectSolanaWalletResult): void {
 export function clearSolanaWalletSession(): void {
   walletAddress.value = ''
   walletName.value = 'Solana wallet'
+  displayWalletAddress.value = ''
+  displayWalletName.value = 'Solana wallet'
   error.value = ''
   lastDisconnectedWalletAddress.value = ''
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(SOLANA_WALLET_ADAPTER_STORAGE_KEY)
+}
+
+function walletSessionErrorMessage(err: unknown): string {
+  if (err instanceof Error && /reject|decline|denied|cancel/i.test(err.message)) {
+    return 'Wallet request was rejected'
+  }
+  if (err instanceof Error && err.message) return err.message
+  return 'Unable to connect Solana wallet'
 }
 
 export function useSolanaWalletSession() {
   hydrateSolanaWalletSession()
 
-  async function connectWallet(): Promise<ConnectSolanaWalletResult | null> {
+  const walletStore = useWallet()
+  const selectorOpen = ref(false)
+
+  const walletOptions = computed<SolanaWalletOption[]>(() =>
+    walletStore.wallets.map((wallet) => ({
+      name: wallet.adapter.name,
+      readyState: wallet.adapter.readyState,
+      readyStateLabel: walletReadyStateLabel(wallet.adapter.readyState),
+    })),
+  )
+
+  const activeSigner = computed<SolanaWalletSigner | null>(() => {
+    if (!walletStore.connected.value || !walletStore.publicKey.value) return null
+    return {
+      publicKey: walletStore.publicKey.value,
+      walletName: walletName.value,
+      signTransaction: walletStore.signTransaction.value,
+      signAndSendTransaction: async (transaction) => ({
+        signature: await walletStore.sendTransaction(transaction, new Connection(solanaRpcUrl(), 'confirmed')),
+      }),
+    }
+  })
+
+  watch(
+    [walletStore.publicKey, walletStore.connected, walletStore.wallet],
+    ([currentPublicKey, isConnected, selectedWallet]) => {
+      if (!isConnected || !currentPublicKey) return
+      if (currentPublicKey.toBase58() === lastDisconnectedWalletAddress.value) return
+      saveSolanaWalletSession({
+        walletAddress: currentPublicKey.toBase58(),
+        walletName: String(selectedWallet?.adapter.name || 'Solana wallet'),
+      })
+    },
+    { immediate: true },
+  )
+
+  function openWalletSelector(): void {
+    error.value = ''
+    selectorOpen.value = true
+  }
+
+  function closeWalletSelector(): void {
+    selectorOpen.value = false
+  }
+
+  async function waitForSelectedWallet(walletNameToSelect: WalletName): Promise<void> {
+    const selectionMatches = () =>
+      walletStore.wallet.value?.adapter.name === walletNameToSelect &&
+      walletStore.adapter.value?.name === walletNameToSelect
+
+    if (!selectionMatches()) {
+      await new Promise<void>((resolve) => {
+        let stop: () => void = () => {}
+        stop = watch(
+          [walletStore.wallet, walletStore.adapter],
+          () => {
+            if (!selectionMatches()) return
+            stop()
+            resolve()
+          },
+          { immediate: true },
+        )
+      })
+    }
+
+    const selectedAdapter = walletStore.adapter.value
+    if (!selectedAdapter) throw new Error('Wallet adapter was not selected')
+
+    const adapterIsReady = await selectedAdapter.ready()
+    await nextTick()
+    if (!adapterIsReady || walletStore.ready.value) return
+
+    await new Promise<void>((resolve) => {
+      let stop: () => void = () => {}
+      stop = watch(walletStore.ready, (isReady) => {
+        if (!isReady) return
+        stop()
+        resolve()
+      }, { immediate: true })
+    })
+  }
+
+  async function connectWallet(walletNameToSelect?: WalletName): Promise<ConnectSolanaWalletResult | null> {
     if (!isLoggedIn()) {
       clearSolanaWalletSession()
       error.value = 'Please sign in before connecting a wallet'
@@ -64,17 +176,34 @@ export function useSolanaWalletSession() {
     connecting.value = true
     error.value = ''
     try {
-      const wallet = await connectSolanaWallet()
-      if (lastDisconnectedWalletAddress.value && wallet.walletAddress === lastDisconnectedWalletAddress.value) {
+      if (walletNameToSelect) {
+        await walletStore.select(walletNameToSelect)
+        await waitForSelectedWallet(walletNameToSelect)
+      }
+      if (!walletStore.wallet.value && !walletNameToSelect) {
+        openWalletSelector()
+        return null
+      }
+      await walletStore.connect()
+      const connectedPublicKey = walletStore.publicKey.value
+      if (!connectedPublicKey) {
+        throw new Error('Wallet connected without a public key')
+      }
+      const wallet = {
+        walletAddress: connectedPublicKey.toBase58(),
+        walletName: String(walletStore.wallet.value?.adapter.name || 'Solana wallet'),
+      }
+      if (wallet.walletAddress === lastDisconnectedWalletAddress.value) {
         clearSolanaWalletSession()
         lastDisconnectedWalletAddress.value = wallet.walletAddress
         error.value = 'Switch accounts in your wallet extension, then connect again.'
         return null
       }
       saveSolanaWalletSession(wallet)
+      selectorOpen.value = false
       return wallet
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Unable to connect Solana wallet'
+      error.value = walletSessionErrorMessage(err)
       return null
     } finally {
       connecting.value = false
@@ -86,9 +215,9 @@ export function useSolanaWalletSession() {
     let disconnectError = ''
     const disconnectedWalletAddress = walletAddress.value
     try {
-      await disconnectSolanaWallet()
+      await walletStore.disconnect()
     } catch (err) {
-      disconnectError = err instanceof Error ? err.message : 'Unable to disconnect Solana wallet'
+      disconnectError = walletSessionErrorMessage(err)
     } finally {
       clearSolanaWalletSession()
       lastDisconnectedWalletAddress.value = disconnectedWalletAddress
@@ -99,8 +228,17 @@ export function useSolanaWalletSession() {
   return {
     walletAddress,
     walletName,
+    displayWalletAddress,
+    displayWalletName,
     connecting,
+    disconnecting: walletStore.disconnecting,
+    connected: walletStore.connected,
+    selectorOpen,
+    walletOptions,
+    activeSigner,
     error,
+    openWalletSelector,
+    closeWalletSelector,
     connectWallet,
     disconnectWallet,
     clearWallet: clearSolanaWalletSession,

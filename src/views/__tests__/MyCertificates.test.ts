@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { PublicKey } from '@solana/web3.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -10,6 +11,14 @@ import MyCertificates from '@/views/MyCertificates.vue'
 
 const walletSession = {
   walletAddress: { value: 'So11111111111111111111111111111111111111112' },
+  walletName: { value: 'Phantom' },
+  activeSigner: {
+    value: {
+      publicKey: new PublicKey('So11111111111111111111111111111111111111112'),
+      walletName: 'Phantom',
+      signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
+    },
+  },
   connecting: { value: false },
   connectWallet: vi.fn(),
 }
@@ -34,6 +43,11 @@ vi.mock('@/composables/useSolanaWalletSession', () => ({
 describe('MyCertificates', () => {
   beforeEach(() => {
     walletSession.walletAddress.value = 'So11111111111111111111111111111111111111112'
+    walletSession.activeSigner.value = {
+      publicKey: new PublicKey('So11111111111111111111111111111111111111112'),
+      walletName: 'Phantom',
+      signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
+    }
     walletSession.connecting.value = false
     walletSession.connectWallet.mockReset()
     walletSession.connectWallet.mockResolvedValue({
@@ -99,16 +113,21 @@ describe('MyCertificates', () => {
     await wrapper.get('[data-testid="claim-certificate"]').trigger('click')
     await flushPromises()
 
-    expect(claimCertificateOnchain).toHaveBeenCalledWith({
-      contestId: 'practice-arena',
-      batchId: '401',
-      topN: 5,
-      walletPublicKey: 'So11111111111111111111111111111111111111112',
-      rank: 1,
-      metadataUri: 'ipfs://QmMetadata',
-      snapshotHash: 'aa'.repeat(32),
-      proof: [],
-    })
+    expect(claimCertificateOnchain).toHaveBeenCalledWith(
+      {
+        contestId: 'practice-arena',
+        batchId: '401',
+        topN: 5,
+        walletPublicKey: 'So11111111111111111111111111111111111111112',
+        rank: 1,
+        metadataUri: 'ipfs://QmMetadata',
+        snapshotHash: 'aa'.repeat(32),
+        proof: [],
+      },
+      expect.objectContaining({
+        walletName: 'Phantom',
+      }),
+    )
     expect(confirmCertificateClaim).toHaveBeenCalledWith({
       contestId: 'practice-arena',
       batchId: '401',
@@ -120,6 +139,19 @@ describe('MyCertificates', () => {
 
   it('blocks claim when the connected wallet does not match the joined wallet', async () => {
     walletSession.walletAddress.value = 'WrongWallet111111111111111111111111111111111'
+
+    const wrapper = mount(MyCertificates)
+    await flushPromises()
+    await wrapper.get('[data-testid="claim-certificate"]').trigger('click')
+    await flushPromises()
+
+    expect(claimCertificateOnchain).not.toHaveBeenCalled()
+    expect(confirmCertificateClaim).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Connect the wallet used to join this contest')
+  })
+
+  it('does not submit a claim without an active wallet signer', async () => {
+    walletSession.activeSigner.value = undefined
 
     const wrapper = mount(MyCertificates)
     await flushPromises()

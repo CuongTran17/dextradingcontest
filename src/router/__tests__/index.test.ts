@@ -2,6 +2,10 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import router from '@/router'
 
+vi.mock('@solana/wallet-adapter-vue', () => ({
+  useWallet: vi.fn(),
+}))
+
 async function navigateAsGuest(path: string) {
   window.localStorage.clear()
   await router.push(path)

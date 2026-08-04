@@ -87,7 +87,7 @@ const loading = ref(true)
 const claiming = ref(false)
 const error = ref('')
 const contestId = computed(() => String(route.params.contestId || 'practice-arena'))
-const { walletAddress, connectWallet } = useSolanaWalletSession()
+const { walletAddress, connectWallet, activeSigner } = useSolanaWalletSession()
 
 onMounted(async () => {
   try {
@@ -125,20 +125,27 @@ async function claim() {
     error.value = 'Connect the wallet used to join this contest'
     return
   }
+  if (!activeSigner.value) {
+    error.value = 'Connect the wallet used to join this contest'
+    return
+  }
 
   claiming.value = true
   error.value = ''
   try {
-    const onchainClaim = await claimCertificateOnchain({
-      contestId: contestId.value,
-      batchId: certificate.value.batchId,
-      topN: certificate.value.topN,
-      walletPublicKey: certificate.value.walletAddress,
-      rank: certificate.value.rank,
-      metadataUri: certificate.value.metadataUri,
-      snapshotHash: certificate.value.snapshotHash,
-      proof: certificate.value.proof,
-    })
+    const onchainClaim = await claimCertificateOnchain(
+      {
+        contestId: contestId.value,
+        batchId: certificate.value.batchId,
+        topN: certificate.value.topN,
+        walletPublicKey: certificate.value.walletAddress,
+        rank: certificate.value.rank,
+        metadataUri: certificate.value.metadataUri,
+        snapshotHash: certificate.value.snapshotHash,
+        proof: certificate.value.proof,
+      },
+      activeSigner.value,
+    )
     certificate.value = await confirmCertificateClaim({
       contestId: contestId.value,
       batchId: certificate.value.batchId,

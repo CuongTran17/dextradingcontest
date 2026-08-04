@@ -17,24 +17,9 @@
     </div>
 
     <div class="mt-3 flex flex-wrap gap-2">
-      <button
-        v-if="!walletAddress && !joined"
-        data-testid="connect-solana-wallet"
-        class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        :disabled="connecting"
-        @click="$emit('connect')"
-      >
-        {{ connecting ? 'Connecting...' : 'Connect Solana wallet' }}
-      </button>
-      <button
-        v-if="walletAddress && !joined"
-        data-testid="disconnect-solana-wallet"
-        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-        type="button"
-        @click="$emit('disconnect')"
-      >
-        Disconnect wallet
-      </button>
+      <p v-if="!walletAddress && !joined" class="text-sm text-gray-500 dark:text-gray-400">
+        Connect wallet from the sidebar
+      </p>
       <button
         data-testid="join-solana-contest"
         class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
@@ -72,8 +57,6 @@ const props = withDefaults(
 )
 
 defineEmits<{
-  connect: []
-  disconnect: []
   join: []
 }>()
 

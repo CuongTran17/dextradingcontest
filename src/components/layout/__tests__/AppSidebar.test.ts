@@ -4,6 +4,9 @@ import AppSidebar from '../AppSidebar.vue'
 import { DEFAULT_TRADE_PATH } from '@/constants/navigation'
 import { isLoggedIn } from '@/services/authApi'
 
+const routerPush = vi.hoisted(() => vi.fn())
+const applicationSignOut = vi.hoisted(() => vi.fn(async () => undefined))
+
 vi.mock('@/composables/useSidebar', () => ({
   useSidebar: () => ({
     isExpanded: { value: true },
@@ -14,7 +17,11 @@ vi.mock('@/composables/useSidebar', () => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ path: '/' }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPush }),
+}))
+
+vi.mock('@/composables/useApplicationLogout', () => ({
+  useApplicationLogout: () => ({ signOut: applicationSignOut }),
 }))
 
 vi.mock('@/services/authApi', () => ({
@@ -35,6 +42,8 @@ vi.mock('../SidebarSolanaWallet.vue', () => ({
 describe('AppSidebar', () => {
   beforeEach(() => {
     vi.mocked(isLoggedIn).mockReturnValue(false)
+    routerPush.mockClear()
+    applicationSignOut.mockClear()
   })
 
   it('uses centralized default crypto trade path', () => {
@@ -84,5 +93,24 @@ describe('AppSidebar', () => {
       },
     })
     expect(loggedIn.find('[data-test="sidebar-wallet"]').exists()).toBe(true)
+  })
+
+  it('uses centralized wallet and account cleanup for sidebar sign out', async () => {
+    vi.mocked(isLoggedIn).mockReturnValue(true)
+    const wrapper = mount(AppSidebar, {
+      global: {
+        stubs: {
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+
+    const signOutLink = wrapper.findAll('a').find((link) => link.text().includes('Sign Out'))
+    expect(signOutLink).toBeDefined()
+
+    await signOutLink!.trigger('click')
+
+    expect(applicationSignOut).toHaveBeenCalledOnce()
+    expect(routerPush).toHaveBeenCalledWith('/welcome')
   })
 })

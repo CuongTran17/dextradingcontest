@@ -236,8 +236,14 @@ import {
   publishCertificateRootOnchain,
   setContestJoinEnabledOnchain,
 } from '@/services/solanaWallet'
+import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 import type { Contest, CryptoSymbol, RawContestStatus } from '@/types/crypto'
 
+const {
+  walletAddress,
+  activeSigner,
+  connectWallet,
+} = useSolanaWalletSession()
 const contests = ref<Contest[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -340,10 +346,16 @@ async function exportCertificates(contestId: string) {
 }
 
 async function initializeOnchain(contestId: string) {
+  const signer = activeSigner.value
+  if (!signer) {
+    error.value = 'Connect the admin wallet before signing this Solana transaction'
+    return
+  }
+
   initializingContestId.value = contestId
   error.value = ''
   try {
-    const onchain = await initializeContestOnchain({ contestId })
+    const onchain = await initializeContestOnchain({ contestId }, signer)
     const updated = await confirmContestOnchainInitialize({
       contestId,
       contestAddress: onchain.contestAddress,
@@ -365,6 +377,11 @@ async function endAndExportContest(contest: Contest) {
   }
   const adminWallet = contest.onchainAdminWallet
   const contestAddress = contest.onchainContestAddress
+  const signer = activeSigner.value
+  if (!signer) {
+    error.value = 'Connect the admin wallet before signing this Solana transaction'
+    return
+  }
 
   endingContestId.value = contest.id
   error.value = ''
@@ -375,7 +392,7 @@ async function endAndExportContest(contest: Contest) {
         contestAddress,
         enabled: false,
         expectedAdminWallet: adminWallet,
-      }),
+      }, signer),
     )
     const endedAt = new Date().toISOString()
     await runStep('Mark contest settling', () =>
@@ -411,6 +428,11 @@ async function publishCertificateRoot() {
     error.value = 'Initialize this contest on Solana before publishing certificate roots'
     return
   }
+  const signer = activeSigner.value
+  if (!signer) {
+    error.value = 'Connect the admin wallet before signing this Solana transaction'
+    return
+  }
 
   publishingCertificateRoot.value = true
   error.value = ''
@@ -424,7 +446,7 @@ async function publishCertificateRoot() {
       topN: certificateExport.value.top_n,
       batchId: certificateExport.value.batch_id,
       expectedAdminWallet: contest.onchainAdminWallet,
-    })
+    }, signer)
     await confirmCertificateBatchAuthorization({
       contestId: certificateExport.value.contest_id,
       batchId: certificateExport.value.batch_id,
