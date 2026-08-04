@@ -135,8 +135,11 @@ function solanaProvider(): SolanaWalletProvider {
   return window.solana
 }
 
-function walletSignerFromProvider(provider: SolanaWalletProvider): SolanaWalletSigner {
-  const publicKey = provider.publicKey
+function walletSignerFromProvider(
+  provider: SolanaWalletProvider,
+  connectedPublicKey = provider.publicKey,
+): SolanaWalletSigner {
+  const publicKey = connectedPublicKey
   if (!publicKey) {
     throw new Error('Connect a Solana wallet before signing transactions')
   }
@@ -152,10 +155,7 @@ async function resolveSolanaSigner(explicitSigner?: SolanaWalletSigner): Promise
   if (explicitSigner) return explicitSigner
   const provider = solanaProvider()
   const connected = await provider.connect()
-  return {
-    ...walletSignerFromProvider({ ...provider, publicKey: connected.publicKey }),
-    publicKey: connected.publicKey,
-  }
+  return walletSignerFromProvider(provider, connected.publicKey)
 }
 
 export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> {

@@ -720,4 +720,47 @@ describe('solanaWallet', () => {
       'Wallet request was rejected',
     )
   })
+
+  it('keeps inherited provider signing methods bound to the original provider', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo')
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: Buffer.alloc(0) } as never)
+    vi.spyOn(Connection.prototype, 'getBalance').mockResolvedValue(1_000_000_000)
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'confirmTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null },
+    })
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
+      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    let provider: NonNullable<typeof window.solana>
+    const prototype = {
+      signAndSendTransaction: vi.fn(function (this: typeof provider) {
+        expect(this).toBe(provider)
+        return Promise.resolve({ signature: '5'.repeat(88) })
+      }),
+    }
+    provider = Object.create(prototype) as NonNullable<typeof window.solana>
+    provider.isPhantom = true
+    provider.connect = async () => ({ publicKey: wallet })
+    window.solana = provider
+
+    await expect(
+      joinContestOnchain({
+        contestId: 'summer-cup',
+        walletPublicKey: wallet.toBase58(),
+      }),
+    ).resolves.toEqual({
+      walletAddress: wallet.toBase58(),
+      signature: '5'.repeat(88),
+    })
+    expect(prototype.signAndSendTransaction).toHaveBeenCalledOnce()
+  })
 })
