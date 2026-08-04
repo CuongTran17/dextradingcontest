@@ -26,7 +26,7 @@
           data-test="sidebar-connect-wallet"
           type="button"
           :disabled="connecting"
-          @click="connectWallet"
+          @click="() => connectWallet()"
         >
           {{ connecting ? 'Connecting...' : 'Connect wallet' }}
         </button>
@@ -50,7 +50,7 @@
       type="button"
       title="Connect wallet"
       :disabled="connecting"
-      @click="connectWallet"
+      @click="() => connectWallet()"
     >
       <PlugInIcon />
     </button>

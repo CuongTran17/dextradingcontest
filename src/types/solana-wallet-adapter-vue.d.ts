@@ -1,4 +1,17 @@
 declare module '@solana/wallet-adapter-vue' {
+  import type { WalletName } from '@solana/wallet-adapter-base'
+  import type { Connection, PublicKey, Transaction } from '@solana/web3.js'
+  import type { Ref } from 'vue'
+
+  interface WalletAdapter {
+    name: WalletName
+    readyState: import('@solana/wallet-adapter-base').WalletReadyState
+  }
+
+  interface Wallet {
+    adapter: WalletAdapter
+  }
+
   export interface WalletStoreOptions {
     wallets: unknown[]
     autoConnect?: boolean
@@ -7,4 +20,20 @@ declare module '@solana/wallet-adapter-vue' {
   }
 
   export function initWallet(walletStoreProps: WalletStoreOptions): void
+
+  export interface WalletStore {
+    wallets: Wallet[]
+    wallet: Ref<Wallet | null>
+    publicKey: Ref<PublicKey | null>
+    connected: Ref<boolean>
+    connecting: Ref<boolean>
+    disconnecting: Ref<boolean>
+    select(walletName: WalletName): void
+    connect(): Promise<void>
+    disconnect(): Promise<void>
+    sendTransaction(transaction: Transaction, connection: Connection): Promise<string>
+    signTransaction: Ref<((transaction: Transaction) => Promise<Transaction>) | undefined>
+  }
+
+  export function useWallet(): WalletStore
 }

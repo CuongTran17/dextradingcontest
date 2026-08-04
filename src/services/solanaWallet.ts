@@ -116,7 +116,7 @@ export interface PublishCertificateRootOnchainResult {
   signature: string
 }
 
-function solanaRpcUrl(): string {
+export function solanaRpcUrl(): string {
   return import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL
 }
 
