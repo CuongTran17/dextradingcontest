@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { PublicKey } from '@solana/web3.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TabContests from '@/views/Admin/components/TabContests.vue'
@@ -34,6 +35,23 @@ vi.mock('@/services/solanaWallet', () => ({
   initializeContestOnchain: vi.fn(),
   publishCertificateRootOnchain: vi.fn(),
   setContestJoinEnabledOnchain: vi.fn(),
+}))
+
+const walletSession = {
+  walletAddress: { value: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB' },
+  walletName: { value: 'Phantom' },
+  activeSigner: {
+    value: {
+      publicKey: new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB'),
+      walletName: 'Phantom',
+      signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
+    },
+  },
+  connectWallet: vi.fn(),
+}
+
+vi.mock('@/composables/useSolanaWalletSession', () => ({
+  useSolanaWalletSession: () => walletSession,
 }))
 
 const contest: Contest = {
@@ -202,15 +220,20 @@ describe('TabContests', () => {
     await wrapper.get('[data-test="publish-certificate-root"]').trigger('click')
     await flushPromises()
 
-    expect(publishCertificateRootOnchain).toHaveBeenCalledWith({
-      contestId: 'summer-cup',
-      contestAddress: 'ContestPda1111111111111111111111111111111',
-      rootHex: 'bb'.repeat(32),
-      snapshotHashHex: 'aa'.repeat(32),
-      topN: 5,
-      batchId: '91',
-      expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
-    })
+    expect(publishCertificateRootOnchain).toHaveBeenCalledWith(
+      {
+        contestId: 'summer-cup',
+        contestAddress: 'ContestPda1111111111111111111111111111111',
+        rootHex: 'bb'.repeat(32),
+        snapshotHashHex: 'aa'.repeat(32),
+        topN: 5,
+        batchId: '91',
+        expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      },
+      expect.objectContaining({
+        walletName: 'Phantom',
+      }),
+    )
     expect(confirmCertificateBatchAuthorization).toHaveBeenCalledWith({
       contestId: 'summer-cup',
       batchId: '91',
@@ -239,7 +262,10 @@ describe('TabContests', () => {
     await wrapper.get('[data-test="initialize-onchain-summer-cup"]').trigger('click')
     await flushPromises()
 
-    expect(initializeContestOnchain).toHaveBeenCalledWith({ contestId: 'summer-cup' })
+    expect(initializeContestOnchain).toHaveBeenCalledWith(
+      { contestId: 'summer-cup' },
+      expect.objectContaining({ walletName: 'Phantom' }),
+    )
     expect(confirmContestOnchainInitialize).toHaveBeenCalledWith({
       contestId: 'summer-cup',
       contestAddress: 'ContestPda1111111111111111111111111111111',
@@ -294,12 +320,15 @@ describe('TabContests', () => {
     await wrapper.get('[data-test="end-export-summer-cup"]').trigger('click')
     await flushPromises()
 
-    expect(setContestJoinEnabledOnchain).toHaveBeenCalledWith({
-      contestId: 'summer-cup',
-      contestAddress: 'ContestPda1111111111111111111111111111111',
-      enabled: false,
-      expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
-    })
+    expect(setContestJoinEnabledOnchain).toHaveBeenCalledWith(
+      {
+        contestId: 'summer-cup',
+        contestAddress: 'ContestPda1111111111111111111111111111111',
+        enabled: false,
+        expectedAdminWallet: 'ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB',
+      },
+      expect.objectContaining({ walletName: 'Phantom' }),
+    )
     expect(updateAdminCryptoContest).toHaveBeenCalledWith('summer-cup', {
       status: 'settling',
       endsAt: expect.any(String),
