@@ -154,4 +154,30 @@ describe('useSolanaWalletSession', () => {
     expect(connect).not.toHaveBeenCalled()
     expect(session.error.value).toBe('Please sign in before connecting a wallet')
   })
+
+  it('clears saved session state when the adapter disconnect rejects', async () => {
+    const session = useSolanaWalletSession()
+    await session.connectWallet(phantomName)
+    disconnect.mockRejectedValueOnce(new Error('Wallet provider rejected disconnect'))
+
+    await session.disconnectWallet()
+
+    expect(disconnect).toHaveBeenCalledOnce()
+    expect(session.walletAddress.value).toBe('')
+    expect(localStorage.getItem('crypto_contest_solana_wallet')).toBeNull()
+    expect(session.error.value).toBe('Wallet request was rejected')
+  })
+
+  it('blocks reconnecting the same address immediately after logout', async () => {
+    const session = useSolanaWalletSession()
+    await session.connectWallet(phantomName)
+    await session.disconnectWallet()
+
+    await expect(session.connectWallet(phantomName)).resolves.toBeNull()
+
+    expect(connect).toHaveBeenCalledTimes(2)
+    expect(session.walletAddress.value).toBe('')
+    expect(localStorage.getItem('crypto_contest_solana_wallet')).toBeNull()
+    expect(session.error.value).toBe('Switch accounts in your wallet extension, then connect again.')
+  })
 })

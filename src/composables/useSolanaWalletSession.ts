@@ -17,6 +17,7 @@ const walletAddress = ref('')
 const walletName = ref('Solana wallet')
 const connecting = ref(false)
 const error = ref('')
+const lastDisconnectedWalletAddress = ref('')
 
 export interface SolanaWalletOption {
   name: WalletName
@@ -48,6 +49,7 @@ function hydrateSolanaWalletSession(): void {
 function saveSolanaWalletSession(wallet: ConnectSolanaWalletResult): void {
   walletAddress.value = wallet.walletAddress
   walletName.value = wallet.walletName
+  lastDisconnectedWalletAddress.value = ''
   localStorage.setItem(STORAGE_KEY, JSON.stringify(wallet))
 }
 
@@ -55,6 +57,7 @@ export function clearSolanaWalletSession(): void {
   walletAddress.value = ''
   walletName.value = 'Solana wallet'
   error.value = ''
+  lastDisconnectedWalletAddress.value = ''
   localStorage.removeItem(STORAGE_KEY)
 }
 
@@ -96,6 +99,7 @@ export function useSolanaWalletSession() {
     [walletStore.publicKey, walletStore.connected, walletStore.wallet],
     ([currentPublicKey, isConnected, selectedWallet]) => {
       if (!isConnected || !currentPublicKey) return
+      if (currentPublicKey.toBase58() === lastDisconnectedWalletAddress.value) return
       saveSolanaWalletSession({
         walletAddress: currentPublicKey.toBase58(),
         walletName: String(selectedWallet?.adapter.name || 'Solana wallet'),
@@ -139,6 +143,12 @@ export function useSolanaWalletSession() {
         walletAddress: connectedPublicKey.toBase58(),
         walletName: String(walletStore.wallet.value?.adapter.name || 'Solana wallet'),
       }
+      if (wallet.walletAddress === lastDisconnectedWalletAddress.value) {
+        clearSolanaWalletSession()
+        lastDisconnectedWalletAddress.value = wallet.walletAddress
+        error.value = 'Switch accounts in your wallet extension, then connect again.'
+        return null
+      }
       saveSolanaWalletSession(wallet)
       selectorOpen.value = false
       return wallet
@@ -153,12 +163,14 @@ export function useSolanaWalletSession() {
   async function disconnectWallet(): Promise<void> {
     error.value = ''
     let disconnectError = ''
+    const disconnectedWalletAddress = walletAddress.value
     try {
       await walletStore.disconnect()
     } catch (err) {
       disconnectError = walletSessionErrorMessage(err)
     } finally {
       clearSolanaWalletSession()
+      lastDisconnectedWalletAddress.value = disconnectedWalletAddress
       error.value = disconnectError
     }
   }
