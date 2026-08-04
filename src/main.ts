@@ -13,7 +13,7 @@ initWallet({
   wallets: createSolanaWalletAdapters() as never,
   autoConnect: true,
   localStorageKey: SOLANA_WALLET_ADAPTER_STORAGE_KEY,
-  onError: (error) => {
+  onError: (error: unknown) => {
     console.error('Solana wallet adapter error:', error)
   },
 })
