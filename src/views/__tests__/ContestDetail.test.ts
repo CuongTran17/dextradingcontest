@@ -1,3 +1,4 @@
+import { PublicKey } from '@solana/web3.js'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +10,15 @@ import ContestDetail from '@/views/ContestDetail.vue'
 const walletSession = vi.hoisted(() => ({
   walletAddress: { value: '' },
   walletName: { value: 'Solana wallet' },
+  activeSigner: {
+    get value() {
+      return {
+        publicKey: new PublicKey(walletSession.walletAddress.value),
+        walletName: walletSession.walletName.value,
+        signAndSendTransaction: vi.fn(async () => ({ signature: '5'.repeat(88) })),
+      }
+    },
+  },
   connecting: { value: false },
   error: { value: '' },
 }))
@@ -265,10 +275,15 @@ describe('ContestDetail', () => {
     await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
     await flushPromises()
 
-    expect(joinContestOnchain).toHaveBeenCalledWith({
-      contestId: 'practice-arena',
-      walletPublicKey: 'So11111111111111111111111111111111111111112',
-    })
+    expect(joinContestOnchain).toHaveBeenCalledWith(
+      {
+        contestId: 'practice-arena',
+        walletPublicKey: 'So11111111111111111111111111111111111111112',
+      },
+      expect.objectContaining({
+        walletName: 'Phantom',
+      }),
+    )
     expect(confirmSolanaJoin).toHaveBeenCalledWith({
       contestId: 'practice-arena',
       walletAddress: 'So11111111111111111111111111111111111111112',

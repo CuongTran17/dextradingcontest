@@ -103,6 +103,7 @@ const joinError = ref('')
 const {
   walletAddress: connectedWallet,
   walletName,
+  activeSigner,
   error: walletError,
 } = useSolanaWalletSession()
 const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
@@ -160,10 +161,13 @@ async function joinContest() {
   joinError.value = ''
   try {
     const pendingJoin = readPendingSolanaJoin(contest.value.id, activeWallet.value)
-    const onchainJoin = pendingJoin ?? await joinContestOnchain({
-      contestId: contest.value.id,
-      walletPublicKey: connectedWallet.value || undefined,
-    })
+    const onchainJoin = pendingJoin ?? await joinContestOnchain(
+      {
+        contestId: contest.value.id,
+        walletPublicKey: connectedWallet.value || undefined,
+      },
+      activeSigner.value || undefined,
+    )
     storePendingSolanaJoin(contest.value.id, onchainJoin)
     await confirmSolanaJoin({
       contestId: contest.value.id,
