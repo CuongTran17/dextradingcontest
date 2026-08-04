@@ -18,13 +18,10 @@
         <div class="flex flex-col gap-2 sm:flex-row">
           <SolanaWalletConnect
             :wallet-address="activeWallet"
-            :wallet-name="walletName"
+            :wallet-name="activeWalletName"
             :joined="joined"
-            :connecting="connectingWallet"
             :joining="joining"
             :error="joinError"
-            @connect="connectWallet"
-            @disconnect="disconnectWallet"
             @join="joinContest"
           />
           <router-link
@@ -88,25 +85,29 @@ import { useRoute } from 'vue-router'
 
 import SimulationDisclaimer from '@/components/crypto/SimulationDisclaimer.vue'
 import SolanaWalletConnect from '@/components/crypto/SolanaWalletConnect.vue'
+import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { fetchContest } from '@/services/cryptoContestApi'
 import { confirmSolanaJoin, fetchContestWallet } from '@/services/cryptoTradingApi'
-import { connectSolanaWallet, disconnectSolanaWallet, joinContestOnchain } from '@/services/solanaWallet'
+import { joinContestOnchain } from '@/services/solanaWallet'
 import type { Contest } from '@/types/crypto'
 
 const route = useRoute()
 const contest = ref<Contest | null>(null)
 const loading = ref(true)
 const loadError = ref('')
-const connectingWallet = ref(false)
 const joining = ref(false)
 const joined = ref(false)
-const connectedWallet = ref('')
 const joinedWallet = ref('')
-const walletName = ref('Solana wallet')
 const joinError = ref('')
+const {
+  walletAddress: connectedWallet,
+  walletName,
+  error: walletError,
+} = useSolanaWalletSession()
 const contestId = computed(() => String(route.params.contestId || DEFAULT_CONTEST_ID))
 const activeWallet = computed(() => joinedWallet.value || connectedWallet.value)
+const activeWalletName = computed(() => walletName.value)
 const solanaReady = computed(() => Boolean(contest.value?.onchainInitializeTxSignature))
 const adminWalletAddress = computed(() => contest.value?.onchainAdminWallet || '')
 const adminWalletBlocked = computed(
@@ -115,6 +116,7 @@ const adminWalletBlocked = computed(
 const solanaJoinBlockedReason = computed(() => {
   if (contest.value && !solanaReady.value) return 'Contest is not initialized on Solana yet.'
   if (adminWalletBlocked.value) return 'The admin wallet that initialized this contest cannot join it.'
+  if (walletError.value) return walletError.value
   return ''
 })
 
@@ -135,41 +137,10 @@ async function loadWalletState() {
     if (wallet.wallet_address) {
       joined.value = true
       joinedWallet.value = wallet.wallet_address
-      connectedWallet.value = wallet.wallet_address
     }
   } catch {
     joined.value = false
     joinedWallet.value = ''
-  }
-}
-
-async function connectWallet() {
-  if (connectingWallet.value || joined.value) return
-
-  connectingWallet.value = true
-  joinError.value = ''
-  try {
-    const wallet = await connectSolanaWallet()
-    connectedWallet.value = wallet.walletAddress
-    walletName.value = wallet.walletName
-  } catch (error) {
-    joinError.value = error instanceof Error ? error.message : 'Unable to connect Solana wallet'
-  } finally {
-    connectingWallet.value = false
-  }
-}
-
-async function disconnectWallet() {
-  if (joined.value) return
-
-  joinError.value = ''
-  try {
-    await disconnectSolanaWallet()
-  } catch (error) {
-    joinError.value = error instanceof Error ? error.message : 'Unable to disconnect Solana wallet'
-  } finally {
-    connectedWallet.value = ''
-    walletName.value = 'Solana wallet'
   }
 }
 
@@ -179,7 +150,8 @@ async function joinContest() {
     joined.value ||
     !contest.value ||
     !solanaReady.value ||
-    adminWalletBlocked.value
+    adminWalletBlocked.value ||
+    !connectedWallet.value
   ) {
     return
   }

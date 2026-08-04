@@ -35,7 +35,7 @@
       </router-link>
     </div>
 
-    <div class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
       <nav class="mb-6">
         <div class="flex flex-col gap-6">
           <div v-for="menuGroup in menuGroups" :key="menuGroup.title">
@@ -76,6 +76,11 @@
         </div>
       </nav>
     </div>
+    <SidebarSolanaWallet
+      v-if="showWalletWidget"
+      class="mb-20 lg:mb-4"
+      :expanded="isExpanded || isHovered || isMobileOpen"
+    />
   </aside>
 </template>
 
@@ -84,6 +89,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useSidebar } from '@/composables/useSidebar'
+import { clearSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { DEFAULT_TRADE_PATH } from '@/constants/navigation'
 import {
@@ -96,10 +102,12 @@ import {
   UserCircleIcon,
 } from '@/icons'
 import { isAdmin, isLoggedIn, logout as authLogout } from '@/services/authApi'
+import SidebarSolanaWallet from './SidebarSolanaWallet.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { isExpanded, isMobileOpen, isHovered } = useSidebar()
+const showWalletWidget = computed(() => isLoggedIn())
 
 const menuGroups = computed(() => {
   const groups = [
@@ -152,6 +160,7 @@ function handleMenuClick(event: Event, path: string): void {
   if (path !== '/logout') return
 
   event.preventDefault()
+  clearSolanaWalletSession()
   authLogout()
   router.push('/welcome')
 }
