@@ -124,7 +124,7 @@ export function useSolanaWalletSession() {
     error.value = ''
     try {
       if (walletNameToSelect) {
-        walletStore.select(walletNameToSelect)
+        await walletStore.select(walletNameToSelect)
       }
       if (!walletStore.wallet.value && !walletNameToSelect) {
         openWalletSelector()

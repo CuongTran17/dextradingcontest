@@ -15,14 +15,17 @@ const selectedWallet = ref(null)
 const selectedAdapter = ref(null)
 const signTransaction = ref<((transaction: Transaction) => Promise<Transaction>) | undefined>()
 const sendTransaction = vi.fn()
-const select = vi.fn((name: WalletName) => {
-  selectedWallet.value = {
+function walletFixture(name: WalletName) {
+  return {
     name,
     url: 'https://phantom.app',
     icon: '',
     adapter: { name, readyState: WalletReadyState.Installed },
     ready: async () => true,
   } as never
+}
+const select = vi.fn((name: WalletName) => {
+  selectedWallet.value = walletFixture(name)
 })
 const connect = vi.fn(async () => {
   publicKey.value = new PublicKey('So11111111111111111111111111111111111111112')
@@ -102,6 +105,28 @@ describe('useSolanaWalletSession', () => {
     })
     expect(session.walletAddress.value).toBe('So11111111111111111111111111111111111111112')
     expect(session.activeSigner.value?.walletName).toBe('Phantom')
+  })
+
+  it('waits for asynchronous wallet selection before connecting', async () => {
+    select.mockImplementationOnce(async (name: WalletName) => {
+      await Promise.resolve()
+      selectedWallet.value = walletFixture(name)
+    })
+    connect.mockImplementationOnce(async () => {
+      if (!selectedWallet.value) {
+        throw new Error('wallet not selected')
+      }
+      publicKey.value = new PublicKey('So11111111111111111111111111111111111111112')
+      connected.value = true
+    })
+    const session = useSolanaWalletSession()
+
+    const result = await session.connectWallet(phantomName)
+
+    expect(result).toEqual({
+      walletAddress: 'So11111111111111111111111111111111111111112',
+      walletName: 'Phantom',
+    })
   })
 
   it('stores stale hydrated wallets as display state only', () => {
