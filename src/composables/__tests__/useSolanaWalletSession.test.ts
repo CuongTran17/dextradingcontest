@@ -1,7 +1,7 @@
 import { WalletReadyState, type WalletName } from '@solana/wallet-adapter-base'
 import { PublicKey, Transaction } from '@solana/web3.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 import { isLoggedIn } from '@/services/authApi'
@@ -13,19 +13,23 @@ const connecting = ref(false)
 const disconnecting = ref(false)
 const selectedWallet = ref(null)
 const selectedAdapter = ref(null)
+const ready = ref(true)
 const signTransaction = ref<((transaction: Transaction) => Promise<Transaction>) | undefined>()
 const sendTransaction = vi.fn()
-function walletFixture(name: WalletName) {
+function walletFixture(name: WalletName, adapterReady = async () => true) {
   return {
     name,
     url: 'https://phantom.app',
     icon: '',
-    adapter: { name, readyState: WalletReadyState.Installed },
-    ready: async () => true,
+    adapter: { name, readyState: WalletReadyState.Installed, ready: adapterReady },
+    ready: adapterReady,
   } as never
 }
 const select = vi.fn((name: WalletName) => {
-  selectedWallet.value = walletFixture(name)
+  const wallet = walletFixture(name)
+  selectedWallet.value = wallet
+  selectedAdapter.value = wallet.adapter
+  ready.value = true
 })
 const connect = vi.fn(async () => {
   publicKey.value = new PublicKey('So11111111111111111111111111111111111111112')
@@ -50,7 +54,7 @@ vi.mock('@solana/wallet-adapter-vue', () => ({
     wallet: selectedWallet,
     adapter: selectedAdapter,
     publicKey,
-    ready: computed(() => true),
+    ready,
     connected,
     connecting,
     disconnecting,
@@ -72,6 +76,8 @@ describe('useSolanaWalletSession', () => {
     publicKey.value = null
     connected.value = false
     selectedWallet.value = null
+    selectedAdapter.value = null
+    ready.value = true
     signTransaction.value = async (transaction) => transaction
     sendTransaction.mockReset()
     select.mockClear()
@@ -107,21 +113,43 @@ describe('useSolanaWalletSession', () => {
     expect(session.activeSigner.value?.walletName).toBe('Phantom')
   })
 
-  it('waits for asynchronous wallet selection before connecting', async () => {
-    select.mockImplementationOnce(async (name: WalletName) => {
-      await Promise.resolve()
-      selectedWallet.value = walletFixture(name)
+  it('waits for the selected adapter readiness to settle before the first connect', async () => {
+    let resolveReady!: (value: boolean) => void
+    const readiness = new Promise<boolean>((resolve) => {
+      resolveReady = resolve
+    })
+    const adapterReady = vi.fn(() => readiness)
+    const selectedName = ref<WalletName | null>(null)
+    const stopSelectionWatch = watch(selectedName, (name) => {
+      if (!name) return
+      const wallet = walletFixture(name, adapterReady)
+      selectedWallet.value = wallet
+      selectedAdapter.value = wallet.adapter
+      ready.value = false
+      void adapterReady().then((isReady) => {
+        ready.value = isReady
+      })
+    })
+    select.mockImplementationOnce((name: WalletName) => {
+      selectedName.value = name
     })
     connect.mockImplementationOnce(async () => {
-      if (!selectedWallet.value) {
-        throw new Error('wallet not selected')
+      if (!selectedWallet.value || !ready.value) {
+        throw new Error('wallet not ready')
       }
       publicKey.value = new PublicKey('So11111111111111111111111111111111111111112')
       connected.value = true
     })
     const session = useSolanaWalletSession()
 
-    const result = await session.connectWallet(phantomName)
+    const resultPromise = session.connectWallet(phantomName)
+    await vi.waitFor(() => expect(adapterReady).toHaveBeenCalled())
+
+    expect(connect).not.toHaveBeenCalled()
+
+    resolveReady(true)
+    const result = await resultPromise
+    stopSelectionWatch()
 
     expect(result).toEqual({
       walletAddress: 'So11111111111111111111111111111111111111112',
@@ -140,7 +168,9 @@ describe('useSolanaWalletSession', () => {
 
     const session = useSolanaWalletSession()
 
-    expect(session.walletAddress.value).toBe('Saved11111111111111111111111111111111111111')
+    expect(session.walletAddress.value).toBe('')
+    expect(session.displayWalletAddress.value).toBe('Saved11111111111111111111111111111111111111')
+    expect(session.displayWalletName.value).toBe('Phantom')
     expect(session.activeSigner.value).toBeNull()
   })
 
@@ -158,6 +188,7 @@ describe('useSolanaWalletSession', () => {
   it('clears saved session state when the adapter disconnect rejects', async () => {
     const session = useSolanaWalletSession()
     await session.connectWallet(phantomName)
+    localStorage.setItem('crypto_contest_solana_wallet_adapter', JSON.stringify(phantomName))
     disconnect.mockRejectedValueOnce(new Error('Wallet provider rejected disconnect'))
 
     await session.disconnectWallet()
@@ -165,6 +196,7 @@ describe('useSolanaWalletSession', () => {
     expect(disconnect).toHaveBeenCalledOnce()
     expect(session.walletAddress.value).toBe('')
     expect(localStorage.getItem('crypto_contest_solana_wallet')).toBeNull()
+    expect(localStorage.getItem('crypto_contest_solana_wallet_adapter')).toBeNull()
     expect(session.error.value).toBe('Wallet request was rejected')
   })
 

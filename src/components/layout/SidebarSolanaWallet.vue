@@ -11,13 +11,13 @@
         <div class="min-w-0">
           <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Solana wallet</p>
           <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-            {{ walletAddress ? walletName : 'Not connected' }}
+            {{ isActiveWallet ? walletName : displayWalletAddress ? 'Saved wallet' : 'Not connected' }}
           </p>
-          <p v-if="walletAddress" class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400" :title="walletAddress">
-            {{ shortWallet(walletAddress) }}
+          <p v-if="displayWalletAddress" class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400" :title="displayWalletAddress">
+            {{ displayWalletName }} {{ shortWallet(displayWalletAddress) }}
           </p>
           <span
-            v-if="walletAddress"
+            v-if="displayWalletAddress"
             class="mt-2 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
           >
             devnet
@@ -27,7 +27,7 @@
 
       <div class="mt-3">
         <button
-          v-if="!walletAddress"
+          v-if="!isActiveWallet"
           class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
           data-test="sidebar-connect-wallet"
           type="button"
@@ -57,7 +57,7 @@
       <p v-if="error" class="mt-2 text-xs text-rose-600">{{ error }}</p>
     </div>
 
-    <div v-else-if="!walletAddress" class="relative">
+    <div v-else-if="!isActiveWallet" class="relative">
       <button
         class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
         data-test="sidebar-connect-wallet"
@@ -91,6 +91,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import { PlugInIcon } from '@/icons'
 import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
 import WalletSelectorPanel from './WalletSelectorPanel.vue'
@@ -102,7 +104,10 @@ defineProps<{
 const {
   walletAddress,
   walletName,
+  displayWalletAddress,
+  displayWalletName,
   connecting,
+  connected,
   selectorOpen,
   walletOptions,
   error,
@@ -111,6 +116,8 @@ const {
   connectWallet,
   disconnectWallet,
 } = useSolanaWalletSession()
+
+const isActiveWallet = computed(() => connected.value && Boolean(walletAddress.value))
 
 function shortWallet(value: string): string {
   return `${value.slice(0, 4)}...${value.slice(-4)}`

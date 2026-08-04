@@ -52,9 +52,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
-import { getSavedUser, isLoggedIn, logout as authLogout } from '@/services/authApi'
+import { useApplicationLogout } from '@/composables/useApplicationLogout'
+import { getSavedUser, isLoggedIn } from '@/services/authApi'
 
 const router = useRouter()
+const { signOut: signOutApplication } = useApplicationLogout()
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 
@@ -80,8 +82,8 @@ function closeDropdown() {
   dropdownOpen.value = false
 }
 
-function signOut() {
-  authLogout()
+async function signOut() {
+  await signOutApplication()
   closeDropdown()
   router.push('/welcome')
 }

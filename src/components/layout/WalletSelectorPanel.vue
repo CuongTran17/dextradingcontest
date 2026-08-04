@@ -4,7 +4,10 @@
     class="rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-gray-950"
   >
     <div class="mb-2 flex items-center justify-between">
-      <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Choose wallet</p>
+      <div>
+        <p class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Choose wallet</p>
+        <p class="mt-0.5 text-xs font-medium text-blue-600 dark:text-blue-300">Solana devnet</p>
+      </div>
       <button
         type="button"
         class="rounded p-1 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900"

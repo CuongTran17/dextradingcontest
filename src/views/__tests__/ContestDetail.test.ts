@@ -10,6 +10,8 @@ import ContestDetail from '@/views/ContestDetail.vue'
 const walletSession = vi.hoisted(() => ({
   walletAddress: { value: '' },
   walletName: { value: 'Solana wallet' },
+  displayWalletAddress: { value: '' },
+  displayWalletName: { value: 'Solana wallet' },
   activeSignerAvailable: { value: true },
   activeSigner: {
     get value() {
@@ -51,6 +53,8 @@ describe('ContestDetail', () => {
     localStorage.clear()
     walletSession.walletAddress.value = ''
     walletSession.walletName.value = 'Solana wallet'
+    walletSession.displayWalletAddress.value = ''
+    walletSession.displayWalletName.value = 'Solana wallet'
     walletSession.activeSignerAvailable.value = true
     walletSession.connecting.value = false
     walletSession.error.value = ''
@@ -160,6 +164,26 @@ describe('ContestDetail', () => {
     expect(wrapper.text()).toContain('Phantom')
     expect(wrapper.text()).toContain('So11...1112')
     expect(wrapper.text()).toContain('Join on Solana')
+  })
+
+  it('does not present a hydrated display-only wallet as ready to sign', async () => {
+    walletSession.displayWalletAddress.value = 'Saved11111111111111111111111111111111111111'
+    walletSession.displayWalletName.value = 'Phantom'
+    walletSession.activeSignerAvailable.value = false
+
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Wallet not connected')
+    expect(wrapper.text()).not.toContain('Wallet connected')
+    expect(wrapper.get('[data-testid="join-solana-contest"]').attributes('disabled')).toBeDefined()
   })
 
   it('does not start a fresh join without an active wallet signer', async () => {

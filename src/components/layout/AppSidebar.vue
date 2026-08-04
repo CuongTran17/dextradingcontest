@@ -89,7 +89,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useSidebar } from '@/composables/useSidebar'
-import { clearSolanaWalletSession } from '@/composables/useSolanaWalletSession'
+import { useApplicationLogout } from '@/composables/useApplicationLogout'
 import { DEFAULT_CONTEST_ID } from '@/constants/cryptoContests'
 import { DEFAULT_TRADE_PATH } from '@/constants/navigation'
 import {
@@ -101,12 +101,13 @@ import {
   LogoutIcon,
   UserCircleIcon,
 } from '@/icons'
-import { isAdmin, isLoggedIn, logout as authLogout } from '@/services/authApi'
+import { isAdmin, isLoggedIn } from '@/services/authApi'
 import SidebarSolanaWallet from './SidebarSolanaWallet.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { isExpanded, isMobileOpen, isHovered } = useSidebar()
+const { signOut } = useApplicationLogout()
 const showWalletWidget = computed(() => isLoggedIn())
 
 const menuGroups = computed(() => {
@@ -156,12 +157,11 @@ function isActive(path: string): boolean {
   return route.path === path
 }
 
-function handleMenuClick(event: Event, path: string): void {
+async function handleMenuClick(event: Event, path: string): Promise<void> {
   if (path !== '/logout') return
 
   event.preventDefault()
-  clearSolanaWalletSession()
-  authLogout()
+  await signOut()
   router.push('/welcome')
 }
 </script>

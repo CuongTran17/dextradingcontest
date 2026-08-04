@@ -11,6 +11,8 @@ let preventReconnect = false
 const walletSession = {
   walletAddress: ref(''),
   walletName: ref('Solana wallet'),
+  displayWalletAddress: ref(''),
+  displayWalletName: ref('Solana wallet'),
   connecting: ref(false),
   disconnecting: ref(false),
   connected: ref(false),
@@ -41,6 +43,8 @@ const walletSession = {
     }
     walletSession.walletAddress.value = 'So11111111111111111111111111111111111111112'
     walletSession.walletName.value = 'Phantom'
+    walletSession.displayWalletAddress.value = walletSession.walletAddress.value
+    walletSession.displayWalletName.value = walletSession.walletName.value
     walletSession.connected.value = true
     walletSession.selectorOpen.value = false
     localStorage.setItem(
@@ -58,6 +62,8 @@ const walletSession = {
   disconnectWallet: vi.fn(async () => {
     walletSession.walletAddress.value = ''
     walletSession.walletName.value = 'Solana wallet'
+    walletSession.displayWalletAddress.value = ''
+    walletSession.displayWalletName.value = 'Solana wallet'
     walletSession.connected.value = false
     localStorage.removeItem('crypto_contest_solana_wallet')
   }),
@@ -74,6 +80,8 @@ describe('SidebarSolanaWallet', () => {
     preventReconnect = false
     walletSession.walletAddress.value = ''
     walletSession.walletName.value = 'Solana wallet'
+    walletSession.displayWalletAddress.value = ''
+    walletSession.displayWalletName.value = 'Solana wallet'
     walletSession.connecting.value = false
     walletSession.disconnecting.value = false
     walletSession.connected.value = false
@@ -96,6 +104,7 @@ describe('SidebarSolanaWallet', () => {
 
     expect(walletSession.openWalletSelector).toHaveBeenCalledOnce()
     expect(wrapper.find('[data-test="wallet-selector"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Solana devnet')
     await wrapper.get('[data-test="wallet-option-Phantom"]').trigger('click')
     await flushPromises()
 
@@ -104,6 +113,23 @@ describe('SidebarSolanaWallet', () => {
     expect(wrapper.text()).toContain('So11...1112')
     expect(wrapper.text()).toContain('devnet')
     expect(wrapper.text()).toContain('Logout')
+  })
+
+  it('offers connection instead of logout for a hydrated display-only wallet', async () => {
+    walletSession.displayWalletAddress.value = 'Saved11111111111111111111111111111111111111'
+    walletSession.displayWalletName.value = 'Phantom'
+
+    const wrapper = mount(SidebarSolanaWallet, {
+      props: { expanded: true },
+    })
+
+    expect(wrapper.text()).toContain('Saved wallet')
+    expect(wrapper.text()).toContain('Connect wallet')
+    expect(wrapper.text()).not.toContain('Logout')
+
+    await wrapper.get('[data-test="sidebar-connect-wallet"]').trigger('click')
+
+    expect(walletSession.openWalletSelector).toHaveBeenCalledOnce()
   })
 
   it('disconnects the wallet from the sidebar', async () => {
