@@ -161,12 +161,17 @@ async function joinContest() {
   joinError.value = ''
   try {
     const pendingJoin = readPendingSolanaJoin(contest.value.id, activeWallet.value)
+    const signer = activeSigner.value
+    if (!pendingJoin && !signer) {
+      joinError.value = 'Connect the wallet used to join this contest'
+      return
+    }
     const onchainJoin = pendingJoin ?? await joinContestOnchain(
       {
         contestId: contest.value.id,
         walletPublicKey: connectedWallet.value || undefined,
       },
-      activeSigner.value || undefined,
+      signer,
     )
     storePendingSolanaJoin(contest.value.id, onchainJoin)
     await confirmSolanaJoin({

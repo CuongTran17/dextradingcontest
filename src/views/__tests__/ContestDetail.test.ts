@@ -10,8 +10,10 @@ import ContestDetail from '@/views/ContestDetail.vue'
 const walletSession = vi.hoisted(() => ({
   walletAddress: { value: '' },
   walletName: { value: 'Solana wallet' },
+  activeSignerAvailable: { value: true },
   activeSigner: {
     get value() {
+      if (!walletSession.activeSignerAvailable.value) return null
       return {
         publicKey: new PublicKey(walletSession.walletAddress.value),
         walletName: walletSession.walletName.value,
@@ -49,6 +51,7 @@ describe('ContestDetail', () => {
     localStorage.clear()
     walletSession.walletAddress.value = ''
     walletSession.walletName.value = 'Solana wallet'
+    walletSession.activeSignerAvailable.value = true
     walletSession.connecting.value = false
     walletSession.error.value = ''
     vi.mocked(fetchContest).mockReset()
@@ -157,6 +160,25 @@ describe('ContestDetail', () => {
     expect(wrapper.text()).toContain('Phantom')
     expect(wrapper.text()).toContain('So11...1112')
     expect(wrapper.text()).toContain('Join on Solana')
+  })
+
+  it('does not start a fresh join without an active wallet signer', async () => {
+    walletSession.walletAddress.value = 'So11111111111111111111111111111111111111112'
+    walletSession.walletName.value = 'Phantom'
+    walletSession.activeSignerAvailable.value = false
+    const wrapper = mount(ContestDetail, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="join-solana-contest"]').trigger('click')
+    await flushPromises()
+
+    expect(joinContestOnchain).not.toHaveBeenCalled()
   })
 
   it('does not render a contest-level wallet logout action', async () => {
