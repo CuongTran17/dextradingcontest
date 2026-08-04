@@ -33,6 +33,13 @@ interface SolanaWalletProvider {
   signTransaction?: (transaction: Transaction) => Promise<Transaction>
 }
 
+export interface SolanaWalletSigner {
+  publicKey: PublicKey
+  walletName: string
+  signAndSendTransaction?: (transaction: Transaction) => Promise<{ signature: string }>
+  signTransaction?: (transaction: Transaction) => Promise<Transaction>
+}
+
 declare global {
   interface Window {
     solana?: SolanaWalletProvider
@@ -128,6 +135,29 @@ function solanaProvider(): SolanaWalletProvider {
   return window.solana
 }
 
+function walletSignerFromProvider(provider: SolanaWalletProvider): SolanaWalletSigner {
+  const publicKey = provider.publicKey
+  if (!publicKey) {
+    throw new Error('Connect a Solana wallet before signing transactions')
+  }
+  return {
+    publicKey,
+    walletName: walletProviderName(provider),
+    signAndSendTransaction: provider.signAndSendTransaction?.bind(provider),
+    signTransaction: provider.signTransaction?.bind(provider),
+  }
+}
+
+async function resolveSolanaSigner(explicitSigner?: SolanaWalletSigner): Promise<SolanaWalletSigner> {
+  if (explicitSigner) return explicitSigner
+  const provider = solanaProvider()
+  const connected = await provider.connect()
+  return {
+    ...walletSignerFromProvider({ ...provider, publicKey: connected.publicKey }),
+    publicKey: connected.publicKey,
+  }
+}
+
 export async function connectSolanaWallet(): Promise<ConnectSolanaWalletResult> {
   const provider = solanaProvider()
   const connected = await provider.connect({ onlyIfTrusted: false })
@@ -146,14 +176,14 @@ export async function disconnectSolanaWallet(): Promise<void> {
 
 export async function initializeContestOnchain(
   input: InitializeContestOnchainInput,
+  signer?: SolanaWalletSigner,
 ): Promise<InitializeContestOnchainResult> {
   if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
     throw new Error('Contest id must be 32 bytes or shorter for Solana')
   }
 
-  const provider = solanaProvider()
-  const connected = await provider.connect()
-  const admin = connected.publicKey
+  const activeSigner = await resolveSolanaSigner(signer)
+  const admin = activeSigner.publicKey
   const programId = contestProgramId()
   const contest = PublicKey.findProgramAddressSync(
     [textEncoder.encode('contest'), textEncoder.encode(input.contestId)],
@@ -187,7 +217,7 @@ export async function initializeContestOnchain(
   transaction.feePayer = admin
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-  const { signature } = await signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(activeSigner, connection, transaction)
   return {
     adminWallet: admin.toBase58(),
     contestAddress: contest.toBase58(),
@@ -197,14 +227,14 @@ export async function initializeContestOnchain(
 
 export async function setContestJoinEnabledOnchain(
   input: SetContestJoinEnabledOnchainInput,
+  signer?: SolanaWalletSigner,
 ): Promise<SetContestJoinEnabledOnchainResult> {
   if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
     throw new Error('Contest id must be 32 bytes or shorter for Solana')
   }
 
-  const provider = solanaProvider()
-  const connected = await provider.connect()
-  const admin = connected.publicKey
+  const activeSigner = await resolveSolanaSigner(signer)
+  const admin = activeSigner.publicKey
   if (input.expectedAdminWallet && admin.toBase58() !== input.expectedAdminWallet) {
     throw new Error('Connected wallet is not the admin wallet that initialized this contest')
   }
@@ -238,7 +268,7 @@ export async function setContestJoinEnabledOnchain(
   transaction.feePayer = admin
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-  const { signature } = await signAndConfirm(provider, connection, transaction, {
+  const { signature } = await signAndConfirm(activeSigner, connection, transaction, {
     preferSeparateSignAndSend: true,
   })
   return {
@@ -250,6 +280,7 @@ export async function setContestJoinEnabledOnchain(
 
 export async function publishCertificateRootOnchain(
   input: PublishCertificateRootOnchainInput,
+  signer?: SolanaWalletSigner,
 ): Promise<PublishCertificateRootOnchainResult> {
   if (Buffer.byteLength(input.contestId, 'utf8') > 32) {
     throw new Error('Contest id must be 32 bytes or shorter for Solana')
@@ -260,9 +291,8 @@ export async function publishCertificateRootOnchain(
 
   const root = hexToBytes32(input.rootHex, 'Certificate root')
   const snapshotHash = hexToBytes32(input.snapshotHashHex, 'Snapshot hash')
-  const provider = solanaProvider()
-  const connected = await provider.connect()
-  const admin = connected.publicKey
+  const activeSigner = await resolveSolanaSigner(signer)
+  const admin = activeSigner.publicKey
   if (input.expectedAdminWallet && admin.toBase58() !== input.expectedAdminWallet) {
     throw new Error('Connected wallet is not the admin wallet that initialized this contest')
   }
@@ -298,7 +328,7 @@ export async function publishCertificateRootOnchain(
   transaction.feePayer = admin
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-  const { signature } = await signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(activeSigner, connection, transaction)
   return {
     adminWallet: admin.toBase58(),
     contestAddress: contest.toBase58(),
@@ -308,10 +338,10 @@ export async function publishCertificateRootOnchain(
 
 export async function joinContestOnchain(
   input: JoinContestOnchainInput,
+  signer?: SolanaWalletSigner,
 ): Promise<JoinContestOnchainResult> {
-  const provider = solanaProvider()
-  const connected = await provider.connect()
-  const wallet = connected.publicKey
+  const activeSigner = await resolveSolanaSigner(signer)
+  const wallet = activeSigner.publicKey
   if (input.walletPublicKey && input.walletPublicKey !== wallet.toBase58()) {
     throw new Error('Connected wallet does not match the selected wallet')
   }
@@ -353,7 +383,7 @@ export async function joinContestOnchain(
   transaction.feePayer = wallet
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-  const { signature } = await signAndConfirm(provider, connection, transaction)
+  const { signature } = await signAndConfirm(activeSigner, connection, transaction)
   return { walletAddress: wallet.toBase58(), signature }
 }
 
@@ -386,6 +416,7 @@ async function assertJoinPrerequisites(
 
 export async function claimCertificateOnchain(
   input: ClaimCertificateOnchainInput,
+  signer?: SolanaWalletSigner,
 ): Promise<ClaimCertificateOnchainResult> {
   const snapshotHash = hexToBytes32(input.snapshotHash, 'Snapshot hash')
   const proof = input.proof.map((item) => hexToBytes32(item, 'Merkle proof item'))
@@ -396,9 +427,8 @@ export async function claimCertificateOnchain(
     throw new Error('Certificate topN must be between 1 and 100')
   }
 
-  const provider = solanaProvider()
-  const connected = await provider.connect()
-  const wallet = connected.publicKey
+  const activeSigner = await resolveSolanaSigner(signer)
+  const wallet = activeSigner.publicKey
   if (input.walletPublicKey !== wallet.toBase58()) {
     throw new Error('Connected wallet does not match the selected wallet')
   }
@@ -459,7 +489,7 @@ export async function claimCertificateOnchain(
   transaction.partialSign(mint)
 
   await assertTransactionSimulation(connection, transaction)
-  const { signature } = await signAndConfirm(provider, connection, transaction, {
+  const { signature } = await signAndConfirm(activeSigner, connection, transaction, {
     preferSeparateSignAndSend: true,
   })
   return { signature, mintAddress: mint.publicKey.toBase58() }
@@ -490,23 +520,23 @@ function formatSimulationError(logs: string[], err: unknown): string {
 }
 
 async function signAndConfirm(
-  provider: SolanaWalletProvider,
+  signer: SolanaWalletSigner,
   connection: Connection,
   transaction: Transaction,
   options: { preferSeparateSignAndSend?: boolean } = {},
 ): Promise<{ signature: string }> {
-  if (provider.signAndSendTransaction && !options.preferSeparateSignAndSend) {
-    const { signature } = await provider.signAndSendTransaction(transaction).catch((error: unknown) => {
+  if (signer.signAndSendTransaction && !options.preferSeparateSignAndSend) {
+    const { signature } = await signer.signAndSendTransaction(transaction).catch((error: unknown) => {
       throw normalizeSolanaWalletError(error)
     })
     await connection.confirmTransaction(signature, 'confirmed').catch(() => undefined)
     return { signature }
   }
 
-  if (!provider.signTransaction) {
+  if (!signer.signTransaction) {
     throw new Error('Connected wallet cannot sign Solana transactions')
   }
-  const signed = await provider.signTransaction(transaction).catch((error: unknown) => {
+  const signed = await signer.signTransaction(transaction).catch((error: unknown) => {
     throw normalizeSolanaWalletError(error)
   })
   const signature = await connection.sendRawTransaction(signed.serialize()).catch((error: unknown) => {
@@ -516,7 +546,10 @@ async function signAndConfirm(
   return { signature }
 }
 
-function normalizeSolanaWalletError(error: unknown): Error {
+export function normalizeSolanaWalletError(error: unknown): Error {
+  if (error instanceof Error && /reject|decline|denied|cancel/i.test(error.message)) {
+    return new Error('Wallet request was rejected')
+  }
   const logs = extractSolanaLogs(error)
   if (logs.length > 0) {
     const message = formatSimulationError(logs, error)

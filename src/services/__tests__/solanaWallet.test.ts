@@ -6,6 +6,7 @@ import {
   connectSolanaWallet,
   initializeContestOnchain,
   joinContestOnchain,
+  normalizeSolanaWalletError,
   publishCertificateRootOnchain,
   setContestJoinEnabledOnchain,
 } from '@/services/solanaWallet'
@@ -642,5 +643,81 @@ describe('solanaWallet', () => {
         isWritable: false,
       },
     ])
+  })
+
+  it('uses an explicit signer for contest join instead of window.solana', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo')
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: Buffer.alloc(0) } as never)
+    vi.spyOn(Connection.prototype, 'getBalance').mockResolvedValue(1_000_000_000)
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(Connection.prototype, 'confirmTransaction').mockResolvedValue({
+      context: { slot: 1 },
+      value: { err: null },
+    })
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
+      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+    const signAndSendTransaction = vi.fn(async () => ({ signature: '5'.repeat(88) }))
+
+    await expect(
+      joinContestOnchain(
+        {
+          contestId: 'summer-cup',
+          walletPublicKey: wallet.toBase58(),
+        },
+        {
+          publicKey: wallet,
+          walletName: 'Phantom',
+          signAndSendTransaction,
+        },
+      ),
+    ).resolves.toEqual({
+      walletAddress: wallet.toBase58(),
+      signature: '5'.repeat(88),
+    })
+    expect(signAndSendTransaction).toHaveBeenCalledOnce()
+  })
+
+  it('throws a clear error when the explicit signer cannot sign or send transactions', async () => {
+    vi.stubEnv('VITE_SOLANA_CONTEST_PROGRAM_ID', '9r5T4DCQoY4sAtJm9uH2j7KVahMhyH1qKbd32EsGdaNx')
+    vi.spyOn(Connection.prototype, 'getAccountInfo')
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: Buffer.alloc(0) } as never)
+    vi.spyOn(Connection.prototype, 'getBalance').mockResolvedValue(1_000_000_000)
+    vi.spyOn(Connection.prototype, 'getLatestBlockhash').mockResolvedValue({
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 1,
+    })
+    vi.spyOn(PublicKey, 'findProgramAddressSync')
+      .mockReturnValueOnce([new PublicKey('11111111111111111111111111111111'), 255])
+      .mockReturnValueOnce([new PublicKey('SysvarRent111111111111111111111111111111111'), 254])
+
+    const wallet = new PublicKey('ExUBrwnH1fLHTbCWy3W7iTetApp58weES84BPZXiJ2NB')
+
+    await expect(
+      joinContestOnchain(
+        {
+          contestId: 'summer-cup',
+          walletPublicKey: wallet.toBase58(),
+        },
+        {
+          publicKey: wallet,
+          walletName: 'Read only wallet',
+        },
+      ),
+    ).rejects.toThrow('Connected wallet cannot sign Solana transactions')
+  })
+
+  it('maps rejected wallet signatures to a readable message', () => {
+    expect(normalizeSolanaWalletError(new Error('User rejected the request.')).message).toBe(
+      'Wallet request was rejected',
+    )
   })
 })
