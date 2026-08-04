@@ -16,6 +16,12 @@
           <p v-if="walletAddress" class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400" :title="walletAddress">
             {{ shortWallet(walletAddress) }}
           </p>
+          <span
+            v-if="walletAddress"
+            class="mt-2 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
+          >
+            devnet
+          </span>
         </div>
       </div>
 
@@ -26,7 +32,7 @@
           data-test="sidebar-connect-wallet"
           type="button"
           :disabled="connecting"
-          @click="() => connectWallet()"
+          @click="openWalletSelector"
         >
           {{ connecting ? 'Connecting...' : 'Connect wallet' }}
         </button>
@@ -40,20 +46,37 @@
           Logout
         </button>
       </div>
+      <WalletSelectorPanel
+        v-if="selectorOpen"
+        class="mt-3"
+        :wallet-options="walletOptions"
+        :connecting="connecting"
+        @close="closeWalletSelector"
+        @select="(walletName) => connectWallet(walletName as never)"
+      />
       <p v-if="error" class="mt-2 text-xs text-rose-600">{{ error }}</p>
     </div>
 
-    <button
-      v-else-if="!walletAddress"
-      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-      data-test="sidebar-connect-wallet"
-      type="button"
-      title="Connect wallet"
-      :disabled="connecting"
-      @click="() => connectWallet()"
-    >
-      <PlugInIcon />
-    </button>
+    <div v-else-if="!walletAddress" class="relative">
+      <button
+        class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        data-test="sidebar-connect-wallet"
+        type="button"
+        title="Connect wallet"
+        :disabled="connecting"
+        @click="openWalletSelector"
+      >
+        <PlugInIcon />
+      </button>
+      <WalletSelectorPanel
+        v-if="selectorOpen"
+        class="absolute bottom-12 left-0 z-20 w-64 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-950"
+        :wallet-options="walletOptions"
+        :connecting="connecting"
+        @close="closeWalletSelector"
+        @select="(walletName) => connectWallet(walletName as never)"
+      />
+    </div>
     <button
       v-else
       class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
@@ -70,6 +93,7 @@
 <script setup lang="ts">
 import { PlugInIcon } from '@/icons'
 import { useSolanaWalletSession } from '@/composables/useSolanaWalletSession'
+import WalletSelectorPanel from './WalletSelectorPanel.vue'
 
 defineProps<{
   expanded: boolean
@@ -79,7 +103,11 @@ const {
   walletAddress,
   walletName,
   connecting,
+  selectorOpen,
+  walletOptions,
   error,
+  openWalletSelector,
+  closeWalletSelector,
   connectWallet,
   disconnectWallet,
 } = useSolanaWalletSession()
